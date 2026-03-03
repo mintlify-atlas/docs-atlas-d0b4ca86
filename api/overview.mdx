@@ -109,6 +109,47 @@ All request and response models are defined using Pydantic and can be found in `
 - **SyncedAction** - IDE action synchronized to audio timestamp
 - **Chapter** - Timeline marker for walkthroughs
 
+## Health Check
+
+<api method="GET" endpoint="/api/health">
+  Check the API server status and get basic system information.
+</api>
+
+### Response
+
+```json
+{
+  "status": "healthy",
+  "workspace": "/path/to/workspace",
+  "sessions_count": 3,
+  "walkthroughs_count": 5
+}
+```
+
+<ResponseField name="status" type="string">
+  Always `"healthy"` if the server is responding.
+</ResponseField>
+
+<ResponseField name="workspace" type="string">
+  Absolute path to the configured workspace directory.
+</ResponseField>
+
+<ResponseField name="sessions_count" type="number">
+  Number of active chat sessions in memory.
+</ResponseField>
+
+<ResponseField name="walkthroughs_count" type="number">
+  Number of walkthroughs currently loaded in memory.
+</ResponseField>
+
+### cURL Example
+
+```bash
+curl http://localhost:8000/api/health
+```
+
+---
+
 ## Rate Limiting
 
 Currently, there are no rate limits. Commands have a 30-second timeout for safety.
