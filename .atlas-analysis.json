@@ -1,0 +1,144 @@
+{
+  "projectType": "saas",
+  "projectName": "VSpeak",
+  "projectDescription": "AI coding coach that generates audio-narrated, video-like coding walkthroughs with perfect synchronization between voice and IDE actions.",
+  "theme": "palm",
+  "primaryColor": "#8B5CF6",
+  "lightColor": "#A78BFA",
+  "darkColor": "#6D28D9",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/walkthrough-mode",
+              "concepts/pipeline",
+              "concepts/synchronization"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/chat-mode",
+              "features/walkthrough-generation",
+              "features/chapters",
+              "features/ide-actions",
+              "features/file-system",
+              "features/terminal"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/providers",
+              "configuration/llm",
+              "configuration/tts",
+              "configuration/stt",
+              "configuration/environment"
+            ]
+          },
+          {
+            "group": "User Guides",
+            "pages": [
+              "guides/creating-walkthroughs",
+              "guides/navigating-chapters",
+              "guides/using-chat",
+              "guides/customizing-voice"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "REST API",
+            "pages": [
+              "api/overview",
+              "api/chat",
+              "api/walkthrough",
+              "api/files",
+              "api/terminal"
+            ]
+          },
+          {
+            "group": "Pipeline",
+            "pages": [
+              "api/pipeline/script-generator",
+              "api/pipeline/audio-generator",
+              "api/pipeline/timestamp-extractor",
+              "api/pipeline/action-sync"
+            ]
+          },
+          {
+            "group": "Frontend",
+            "pages": [
+              "api/frontend/timeline-scheduler",
+              "api/frontend/action-executor",
+              "api/frontend/terminal-controller"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Contributing",
+            "pages": [
+              "development/setup",
+              "development/architecture",
+              "development/adding-providers",
+              "development/extending-actions"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/overview",
+              "deployment/backend",
+              "deployment/frontend",
+              "deployment/environment-variables"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Audio-synchronized coding walkthroughs with voice narration",
+    "Modular AI provider architecture (LLM, TTS, STT)",
+    "Chapter-based navigation with instant state restoration",
+    "Monaco editor with VS Code experience",
+    "Real-time terminal integration",
+    "Dual-mode operation: Chat assistant and Walkthrough player",
+    "Millisecond-perfect synchronization between audio and IDE actions"
+  ],
+  "publicApiSurface": [
+    "POST /api/chat - Chat with AI assistant",
+    "POST /api/walkthrough/generate - Generate audio-visual walkthrough",
+    "GET /api/walkthrough/{id} - Retrieve walkthrough session",
+    "GET /api/walkthrough/{id}/audio - Stream walkthrough audio",
+    "GET /api/files - List workspace files",
+    "PUT /api/files/{path} - Write file content",
+    "POST /api/terminal/execute - Execute terminal command",
+    "WebSocket /ws/terminal - Interactive terminal session",
+    "run_pipeline() - Main pipeline entry point",
+    "ScriptGenerator.generate() - Generate narrated script",
+    "AudioGenerator.generate_audio() - Synthesize speech",
+    "TimestampExtractor.extract_timestamps() - Extract word timestamps",
+    "ActionSyncEngine.sync_actions() - Synchronize actions with audio"
+  ]
+}
