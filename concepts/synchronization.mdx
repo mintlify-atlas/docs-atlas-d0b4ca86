@@ -1,0 +1,607 @@
+---
+title: Audio-Action Synchronization
+description: How VSpeak achieves perfect timing between audio narration and IDE actions
+---
+
+## The Synchronization Challenge
+
+The core technical challenge of VSpeak is: **How do we make IDE actions happen at exactly the right moment in the audio narration?**
+
+For example:
+- When the AI says "Let's import React", the import statement should appear
+- When it says "Run the tests", the terminal command should execute
+- When seeking to a different time, all actions up to that point should be applied
+
+This requires precise millisecond-level synchronization between:
+- Audio playback (controlled by `<audio>` element)
+- IDE actions (typing, file creation, terminal commands)
+- User interactions (play, pause, seek)
+
+## The Audio-as-Clock Architecture
+
+VSpeak uses a **pull-based** synchronization model where the **audio element is the single source of truth** for time.
+
+### Key Principle
+
+> All actions are scheduled relative to `audio.currentTime`. The scheduler continuously checks the audio's current position and fires actions that are due.
+
+This approach ensures:
+- **Perfect sync**: Actions fire exactly when they should in the audio
+- **Seek support**: Jumping to any point works correctly
+- **Pause/resume**: State is always consistent with audio position
+
+## The Timeline Scheduler
+
+The `TimelineScheduler` is responsible for executing actions at the right time.
+
+### Core Concept
+
+```typescript
+class TimelineScheduler {
+  private audio: HTMLAudioElement;  // Source of truth for time
+  private actions: TimelineAction[]; // Sorted by timestamp
+  private pointer: number = 0;       // Next action to fire
+  
+  private tick(): void {
+    // Get current audio time
+    const nowMs = this.audio.currentTime * 1000;
+    
+    // Fire all actions that are due
+    while (this.pointer < this.actions.length) {
+      const next = this.actions[this.pointer];
+      
+      if (next.timeMs <= nowMs) {
+        // Action is due - fire it!
+        this.callbacks.onAction(next);
+        this.pointer++;
+      } else {
+        // This action is in the future
+        break;
+      }
+    }
+    
+    // Schedule next check
+    requestAnimationFrame(() => this.tick());
+  }
+}
+```
+
+**Location**: `web/src/timeline/scheduler.ts:22`
+
+### How It Works
+
+1. **Initialization**: Actions are sorted by `timeMs`
+2. **Playback loop**: `requestAnimationFrame` calls `tick()` every frame (~60fps)
+3. **Time check**: Compare `audio.currentTime` to next action's `timeMs`
+4. **Execution**: Fire all actions whose time has passed
+5. **Pointer advance**: Move to next unfired action
+
+## Action Timing
+
+Each action has a precise timestamp from the synchronization pipeline:
+
+```typescript
+interface TimelineAction {
+  kind: 'create_file' | 'type' | 'terminal_run' | ...;
+  timeMs: number;  // When to execute (milliseconds from audio start)
+  // ... action-specific parameters
+}
+```
+
+### Example Timeline
+
+```typescript
+const actions: TimelineAction[] = [
+  { timeMs: 1200,  kind: 'create_file', path: 'App.jsx' },
+  { timeMs: 2500,  kind: 'type', text: 'import React from "react";' },
+  { timeMs: 8400,  kind: 'terminal_run', command: 'npm start' },
+  { timeMs: 12000, kind: 'highlight_range', startLine: 5, endLine: 8 }
+];
+```
+
+**When audio reaches:**
+- `1.2s`: Create file
+- `2.5s`: Start typing import
+- `8.4s`: Run terminal command
+- `12.0s`: Highlight code
+
+## Tolerance and Drift
+
+Due to the asynchronous nature of `requestAnimationFrame`, actions may not fire at the **exact** millisecond. The scheduler includes tolerance:
+
+```typescript
+private toleranceMs: number = 16; // One frame at 60fps
+
+private tick(): void {
+  const nowMs = this.audio.currentTime * 1000;
+  
+  while (this.pointer < this.actions.length) {
+    const next = this.actions[this.pointer];
+    
+    // Fire if within tolerance
+    if (next.timeMs - this.toleranceMs <= nowMs) {
+      const meta: FiredActionMeta = {
+        scheduledTimeMs: next.timeMs,
+        actualTimeMs: nowMs,
+        driftMs: nowMs - next.timeMs  // How far off were we?
+      };
+      this.callbacks.onAction(next, meta);
+      this.pointer++;
+    } else {
+      break;
+    }
+  }
+}
+```
+
+**Drift tracking**: Each action records when it was scheduled vs when it actually fired.
+
+<Note>
+  In practice, drift is typically < 5ms, imperceptible to users.
+</Note>
+
+## Seeking: The Hard Problem
+
+When a user seeks to a different point in the audio, we need to:
+
+1. **Reset the editor** to a clean state
+2. **Apply all actions** up to the seek point
+3. **Resume playback** from the new position
+
+### Naive Approach (Doesn't Work)
+
+```typescript
+// ❌ This is too slow for large walkthroughs
+function naiveSeek(timeMs: number) {
+  executor.reset();
+  
+  // Replay EVERY action from the beginning
+  for (const action of actions) {
+    if (action.timeMs <= timeMs) {
+      executor.execute(action);
+    }
+  }
+}
+```
+
+**Problem**: For a 2-minute walkthrough with 200 actions, seeking to 1:30 requires replaying 150+ actions. This causes noticeable lag.
+
+### Chapter Snapshots (Optimized)
+
+VSpeak uses **chapter-based snapshots** to optimize seeking:
+
+```typescript
+interface Chapter {
+  id: string;
+  title: string;
+  start_ms: number;
+  end_ms: number;
+  snapshot?: IDEStateSnapshot;  // State at chapter start
+}
+
+interface IDEStateSnapshot {
+  files: Record<string, string>;      // file path → content
+  open_tabs: string[];                // which files are open
+  active_file: string;                // focused file
+  cursor_position: { line: number; column: number };
+  terminal_output: string[];
+}
+```
+
+### Optimized Seek Algorithm
+
+```typescript
+function handleSeek(timeMs: number) {
+  // 1. Find the chapter containing the seek point
+  const chapter = chapters.find(ch => 
+    timeMs >= ch.start_ms && timeMs < ch.end_ms
+  );
+  
+  if (!chapter) {
+    // Before first chapter - start from scratch
+    executor.reset();
+    scheduler.syncPointer(timeMs);
+    return;
+  }
+  
+  // 2. Reset editor
+  executor.reset();
+  
+  // 3. Restore chapter snapshot (if available)
+  if (chapter.snapshot) {
+    restoreSnapshot(chapter.snapshot);
+  }
+  
+  // 4. Apply only actions between chapter start and seek point
+  executor.beginBatch();
+  for (const action of scheduler.getActions()) {
+    if (action.timeMs > timeMs) break;
+    if (action.timeMs >= chapter.start_ms) {
+      executor.execute(action);
+    }
+  }
+  executor.endBatch();
+  
+  // 5. Update scheduler pointer
+  scheduler.primeAfter(timeMs);
+}
+```
+
+**Performance**:
+- Without snapshots: Replay 150 actions (~500ms)
+- With snapshots: Restore snapshot + replay 20 actions (~50ms)
+
+**Implementation**: `web/src/App.tsx:356`
+
+## Pointer Synchronization
+
+The scheduler maintains a **pointer** to the next unfired action. When seeking, this pointer must be updated:
+
+```typescript
+// Sync pointer to time (exclusive - don't re-fire actions at exactly timeMs)
+private syncPointer(timeMs: number): void {
+  if (timeMs <= 0) {
+    this.pointer = 0;
+    return;
+  }
+  
+  // Find first action AFTER timeMs
+  let idx = 0;
+  while (idx < this.actions.length && 
+         this.actions[idx].timeMs < timeMs - this.toleranceMs) {
+    idx++;
+  }
+  this.pointer = idx;
+}
+
+// Sync pointer after applying effects up to timeMs (inclusive)
+private syncPointerAfter(timeMs: number): void {
+  if (timeMs <= 0) {
+    this.pointer = 0;
+    return;
+  }
+  
+  // Skip actions whose time is <= timeMs
+  let idx = 0;
+  while (idx < this.actions.length && 
+         this.actions[idx].timeMs <= timeMs + this.toleranceMs) {
+    idx++;
+  }
+  this.pointer = idx;
+}
+```
+
+**Key difference**:
+- `syncPointer(timeMs)`: Used when seeking without applying actions
+- `syncPointerAfter(timeMs)`: Used after applying actions (prevents re-firing)
+
+**Location**: `web/src/timeline/scheduler.ts:176`
+
+## Action Execution
+
+The `ActionExecutor` handles the actual IDE manipulations:
+
+```typescript
+class ActionExecutor {
+  private editor: monaco.editor.IStandaloneCodeEditor;
+  private monaco: typeof monaco;
+  private terminal: TerminalController;
+  
+  execute(action: TimelineAction): void {
+    switch (action.kind) {
+      case 'create_file':
+        this.createFile(action.path, action.content);
+        break;
+      
+      case 'type':
+        this.typeText(action.path, action.text, action.charactersPerSecond);
+        break;
+      
+      case 'terminal_run':
+        this.terminal.executeCommand(action.command);
+        break;
+      
+      case 'highlight_range':
+        this.highlightRange(action.path, action.range, action.color);
+        break;
+      
+      // ... other action types
+    }
+  }
+}
+```
+
+**Location**: `web/src/editor/actionExecutor.ts`
+
+### Typing Animation
+
+For `type` actions, text can appear instantly or animate character-by-character:
+
+```typescript
+private typeText(path: string, text: string, charactersPerSecond?: number): void {
+  if (!charactersPerSecond || !this.isPlaying) {
+    // Instant mode (used during seek)
+    this.insertTextInstant(path, text);
+    return;
+  }
+  
+  // Animated typing
+  const msPerChar = 1000 / charactersPerSecond;
+  let charIndex = 0;
+  
+  const typeNextChar = () => {
+    if (charIndex < text.length && this.isPlaying) {
+      this.insertTextInstant(path, text[charIndex]);
+      charIndex++;
+      setTimeout(typeNextChar, msPerChar);
+    }
+  };
+  
+  typeNextChar();
+}
+```
+
+**Speed presets**:
+- `slow`: 20 characters/second
+- `medium`: 40 characters/second
+- `fast`: 60 characters/second
+
+## Playback Controls
+
+### Play
+
+```typescript
+function handlePlay() {
+  setIsPlaying(true);
+  executorRef.current?.setPlaying(true);
+  schedulerRef.current?.start();
+}
+```
+
+**What happens**:
+1. Set playing state (enables typing animation)
+2. Start scheduler tick loop
+3. Audio element plays automatically (controlled by WalkthroughPlayer)
+
+### Pause
+
+```typescript
+function handlePause() {
+  setIsPlaying(false);
+  executorRef.current?.setPlaying(false);
+  executorRef.current?.flushTypingNow();  // Complete any in-progress typing
+  schedulerRef.current?.stop();
+}
+```
+
+**What happens**:
+1. Stop scheduler tick loop
+2. Flush any in-progress typing animations
+3. Audio element pauses
+
+### Reset
+
+```typescript
+function handleReset() {
+  setIsPlaying(false);
+  setCurrentTimeMs(0);
+  setFiles([]);
+  setActiveFile(null);
+  executorRef.current?.reset();
+  schedulerRef.current?.reset();
+  audioElement.currentTime = 0;
+}
+```
+
+**What happens**:
+1. Clear all editor state
+2. Reset scheduler pointer to 0
+3. Reset audio to beginning
+
+## Event Handling
+
+The scheduler listens to audio events for automatic synchronization:
+
+```typescript
+constructor(options: TimelineSchedulerOptions) {
+  this.audio = options.audio;
+  
+  // Sync when user seeks via audio controls
+  this.audio.addEventListener('seeked', () => {
+    const timeMs = this.audio.currentTime * 1000;
+    this.syncPointer(timeMs);
+    this.callbacks.onSeek?.(timeMs);
+  });
+  
+  // Stop when audio ends
+  this.audio.addEventListener('ended', () => {
+    this.pointer = this.actions.length;
+    this.callbacks.onComplete?.();
+    this.stop();
+  });
+}
+```
+
+**Location**: `web/src/timeline/scheduler.ts:44`
+
+## Batching for Performance
+
+When applying multiple actions (e.g., during seek), batching improves performance:
+
+```typescript
+class ActionExecutor {
+  private batchDepth = 0;
+  
+  beginBatch(): void {
+    this.batchDepth++;
+  }
+  
+  endBatch(): void {
+    this.batchDepth--;
+    if (this.batchDepth === 0) {
+      // Batch complete - trigger re-render
+      this.callbacks.onBatchComplete?.();
+    }
+  }
+  
+  execute(action: TimelineAction): void {
+    // Execute action...
+    
+    // Only trigger callbacks if not in batch
+    if (this.batchDepth === 0) {
+      this.callbacks.onFileCreated?.(action.path);
+    }
+  }
+}
+```
+
+**Usage**:
+```typescript
+executor.beginBatch();
+for (const action of actions) {
+  executor.execute(action);
+}
+executor.endBatch();  // Single re-render instead of 100+
+```
+
+## Timeline Actions Reference
+
+All supported action types:
+
+```typescript
+type TimelineActionKind =
+  | 'create_file'      // Create a new file
+  | 'open_file'        // Switch to a file
+  | 'type'             // Type text (animated or instant)
+  | 'move_cursor'      // Move cursor position
+  | 'highlight_range'  // Highlight code lines
+  | 'terminal_run'     // Execute terminal command
+  | 'terminal_output'  // Display terminal output
+  | 'clear_terminal';  // Clear terminal
+```
+
+**Full definitions**: `web/src/timeline/types.ts:1`
+
+## Debugging Synchronization
+
+### Drift Monitoring
+
+Every fired action includes drift metrics:
+
+```typescript
+interface FiredActionMeta {
+  scheduledTimeMs: number;  // When it should have fired
+  actualTimeMs: number;     // When it actually fired
+  driftMs: number;          // Difference (positive = late)
+}
+
+scheduler.callbacks.onAction = (action, meta) => {
+  if (Math.abs(meta.driftMs) > 50) {
+    console.warn(`Action ${action.id} drifted by ${meta.driftMs}ms`);
+  }
+};
+```
+
+### Timeline Visualization
+
+The walkthrough player includes a visual timeline showing:
+- **Chapter markers**: Colored regions for each chapter
+- **Current position**: Red playhead indicator
+- **Progress bar**: Shows percentage complete
+
+```typescript
+<div className="timeline">
+  {chapters.map(chapter => (
+    <div 
+      className="chapter-marker"
+      style={{
+        left: `${(chapter.start_ms / totalDurationMs) * 100}%`,
+        width: `${((chapter.end_ms - chapter.start_ms) / totalDurationMs) * 100}%`
+      }}
+      onClick={() => handleSeek(chapter.start_ms)}
+    >
+      {chapter.title}
+    </div>
+  ))}
+  
+  <div 
+    className="playhead"
+    style={{ left: `${(currentTimeMs / totalDurationMs) * 100}%` }}
+  />
+</div>
+```
+
+## Why This Approach Works
+
+The audio-as-clock architecture provides several benefits:
+
+1. **Simplicity**: One source of truth eliminates sync bugs
+2. **Browser-native**: Leverages optimized audio playback
+3. **Seek support**: Free from audio element's built-in seeking
+4. **Pause/resume**: State always matches audio position
+5. **User controls**: Works with native audio controls (if exposed)
+
+### Alternative Approaches (Why We Didn't Use Them)
+
+<Tabs>
+  <Tab title="Independent Timers">
+    **Approach**: Use `setInterval` to track time independently
+    
+    **Problem**: Timers drift from audio over time, causing desync
+    
+    ```typescript
+    // ❌ This will drift
+    let currentTime = 0;
+    setInterval(() => {
+      currentTime += 16;  // Assumes 60fps
+      fireActions(currentTime);
+    }, 16);
+    ```
+  </Tab>
+  
+  <Tab title="Video Sync">
+    **Approach**: Generate a video with burned-in actions
+    
+    **Problem**: Can't pause to explore code, can't copy snippets, large file sizes
+  </Tab>
+  
+  <Tab title="Audio Markers">
+    **Approach**: Use HTML5 audio cue points
+    
+    **Problem**: Limited browser support, no word-level granularity
+  </Tab>
+</Tabs>
+
+## Performance Considerations
+
+### Frame Rate
+
+At 60fps, the scheduler checks for actions every ~16ms. This is imperceptible to users but provides tight synchronization.
+
+### Memory Usage
+
+For a typical 2-minute walkthrough:
+- 200 actions × 200 bytes/action ≈ **40 KB**
+- 500 word timestamps × 100 bytes ≈ **50 KB**
+- Audio file (WAV) ≈ **20-40 MB**
+
+### CPU Usage
+
+The scheduler uses `requestAnimationFrame`, which:
+- Pauses when tab is inactive (saves battery)
+- Aligns with browser rendering (smooth 60fps)
+- Cancels cleanly when stopped
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Architecture" icon="diagram-project" href="/concepts/architecture">
+    Explore the system architecture
+  </Card>
+  <Card title="Pipeline" icon="arrow-progress" href="/concepts/pipeline">
+    Learn about walkthrough generation
+  </Card>
+  <Card title="Walkthrough Mode" icon="circle-play" href="/concepts/walkthrough-mode">
+    Understand the dual-mode system
+  </Card>
+</CardGroup>

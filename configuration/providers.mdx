@@ -1,0 +1,202 @@
+---
+title: "AI Provider Configuration"
+description: "Configure and switch between Cerebras, Gemini, and Groq AI providers"
+---
+
+VSpeak integrates with multiple AI providers to power its script generation, text-to-speech, and speech-to-text capabilities. This guide explains how to configure and switch between providers.
+
+## Available Providers
+
+VSpeak supports three AI providers, each serving different purposes:
+
+<CardGroup cols={3}>
+  <Card title="Cerebras" icon="brain">
+    Script generation using GLM 4.7 model
+  </Card>
+  <Card title="Gemini" icon="microphone">
+    Text-to-speech with 2.5 Flash Preview TTS
+  </Card>
+  <Card title="Groq" icon="waveform">
+    TTS (Orpheus) and STT (Whisper) services
+  </Card>
+</CardGroup>
+
+## Provider Configuration
+
+### Cerebras (Script Generation)
+
+Cerebras powers the LLM-based script generation using the GLM 4.7 model.
+
+**Location:** `backend/config.py:15-18`
+
+```python
+CEREBRAS_MODEL = "zai-glm-4.7"
+CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
+DISABLE_REASONING = True  # Reasoning OFF for faster responses
+```
+
+<ParamField path="CEREBRAS_MODEL" type="string" default="zai-glm-4.7">
+  The Cerebras model to use for script generation
+</ParamField>
+
+<ParamField path="CEREBRAS_BASE_URL" type="string" default="https://api.cerebras.ai/v1">
+  Base URL for Cerebras API endpoint
+</ParamField>
+
+<ParamField path="DISABLE_REASONING" type="boolean" default="true">
+  Disable reasoning mode for faster response times. Set to `false` for more detailed analysis.
+</ParamField>
+
+<Note>
+The Cerebras client includes automatic retry logic with exponential backoff for rate limiting (max 3 retries).
+</Note>
+
+### Gemini (Text-to-Speech)
+
+Gemini 2.5 Flash provides native text-to-speech without requiring chunking.
+
+**Location:** `backend/config.py:29-30`
+
+```python
+GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts"
+GEMINI_TTS_VOICE = "Kore"  # Options: Zephyr, Puck, Charon, Kore, Fenrir, etc.
+```
+
+<ParamField path="GEMINI_TTS_MODEL" type="string" default="gemini-2.5-flash-preview-tts">
+  The Gemini model used for text-to-speech generation
+</ParamField>
+
+<ParamField path="GEMINI_TTS_VOICE" type="string" default="Kore">
+  Voice profile for Gemini TTS. Available voices: Zephyr, Puck, Charon, Kore, Fenrir
+</ParamField>
+
+**Gemini TTS Features:**
+- No chunking required (handles full scripts)
+- Supports director's notes for tone/style control
+- 24kHz audio output
+- Custom voice profiles
+
+### Groq (TTS & STT)
+
+Groq provides both Orpheus TTS and Whisper STT services.
+
+**Location:** `backend/config.py:24-33`
+
+```python
+# Groq TTS Configuration (Orpheus)
+ORPHEUS_TTS_MODEL = "canopylabs/orpheus-v1-english"
+ORPHEUS_TTS_VOICE = "austin"
+TTS_RESPONSE_FORMAT = "wav"
+
+# Groq STT Configuration
+STT_MODEL = "whisper-large-v3-turbo"
+```
+
+<ParamField path="ORPHEUS_TTS_MODEL" type="string" default="canopylabs/orpheus-v1-english">
+  Groq's Orpheus model for text-to-speech
+</ParamField>
+
+<ParamField path="ORPHEUS_TTS_VOICE" type="string" default="austin">
+  Voice profile for Orpheus TTS
+</ParamField>
+
+<ParamField path="STT_MODEL" type="string" default="whisper-large-v3-turbo">
+  Whisper model for speech-to-text transcription
+</ParamField>
+
+## Switching Between Providers
+
+### Changing TTS Provider
+
+To switch between Gemini and Groq (Orpheus) for text-to-speech:
+
+**Location:** `backend/config.py:21`
+
+```python
+TTS_PROVIDER = "gemini"  # Switch between "gemini" or "orpheus"
+```
+
+<Tabs>
+  <Tab title="Gemini TTS">
+    ```python
+    # config.py
+    TTS_PROVIDER = "gemini"
+    ```
+    
+    **Advantages:**
+    - Handles long text without chunking
+    - Director's notes support
+    - Multiple voice options
+    
+    **Best for:** Full script narration, custom tone control
+  </Tab>
+  
+  <Tab title="Orpheus TTS">
+    ```python
+    # config.py
+    TTS_PROVIDER = "orpheus"
+    ```
+    
+    **Advantages:**
+    - Vocal direction support (cheerful, excited, whisper, etc.)
+    - Fast generation
+    - 24kHz output
+    
+    **Best for:** Short chunks, dynamic vocal expressions
+  </Tab>
+</Tabs>
+
+<Warning>
+When switching TTS providers, ensure you have the corresponding API key configured in your environment variables.
+</Warning>
+
+## Provider Selection Guide
+
+### When to Use Each Provider
+
+| Task | Provider | Model | Why |
+|------|----------|-------|-----|
+| Script Generation | Cerebras | GLM 4.7 | Fast inference, JSON output support |
+| Full Script TTS | Gemini | 2.5 Flash TTS | No chunking needed, director's notes |
+| Chunked TTS | Groq | Orpheus v1 | Vocal directions, fast generation |
+| Transcription | Groq | Whisper Large v3 Turbo | Word-level timestamps, high accuracy |
+
+## API Client Implementation
+
+VSpeak uses dedicated client classes for each provider:
+
+**Location:** `backend/clients/`
+
+```python
+from clients import CerebrasClient, GroqTTSClient, GroqSTTClient
+from clients.gemini_client import GeminiTTSClient
+
+# Initialize clients
+cerebras = CerebrasClient()
+gemini_tts = GeminiTTSClient()
+groq_tts = GroqTTSClient()
+groq_stt = GroqSTTClient()
+```
+
+Each client handles:
+- API authentication
+- Request formatting
+- Error handling & retries
+- Response parsing
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="LLM Configuration" icon="brain" href="/configuration/llm">
+    Configure script generation settings
+  </Card>
+  <Card title="TTS Configuration" icon="microphone" href="/configuration/tts">
+    Configure text-to-speech options
+  </Card>
+  <Card title="STT Configuration" icon="waveform" href="/configuration/stt">
+    Configure speech-to-text settings
+  </Card>
+  <Card title="Environment Variables" icon="key" href="/configuration/environment">
+    Set up API keys and credentials
+  </Card>
+</CardGroup>

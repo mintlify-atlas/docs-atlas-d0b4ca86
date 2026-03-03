@@ -1,0 +1,281 @@
+---
+title: Development Setup
+description: Set up your local development environment for contributing to VSpeak
+---
+
+## Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Python 3.11+** - Backend runtime
+- **Node.js 18+** - Frontend build tools
+- **Git** - Version control
+- **API Keys** - For your chosen AI providers
+
+## Clone the Repository
+
+```bash
+git clone https://github.com/your-org/vspeak.git
+cd vspeak
+```
+
+## Backend Setup
+
+<Steps>
+  <Step title="Navigate to backend directory">
+    ```bash
+    cd backend
+    ```
+  </Step>
+
+  <Step title="Create virtual environment">
+    ```bash
+    python -m venv venv
+    
+    # Windows
+    venv\Scripts\activate
+    
+    # macOS/Linux
+    source venv/bin/activate
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+    Core dependencies:
+    - `cerebras-cloud-sdk` - LLM client (swappable)
+    - `groq` - TTS/STT client (swappable)
+    - `google-genai` - Gemini TTS client (optional)
+    - `fastapi` - API server
+    - `pydantic` - Data validation
+    - `python-dotenv` - Environment configuration
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env` file in the `backend/` directory:
+
+    ```env
+    # LLM Provider (choose one or more)
+    CEREBRAS_API_KEY=your_cerebras_key_here
+    
+    # TTS Provider (choose one or more)
+    GROQ_API_KEY=your_groq_key_here        # For Orpheus TTS
+    GEMINI_API_KEY=your_gemini_key_here    # For Gemini TTS
+    
+    # STT Provider (required for timestamp extraction)
+    GROQ_API_KEY=your_groq_key_here        # For Whisper STT
+    ```
+
+    <Tip>
+      You can use different providers for different components. See [Configuration](/configuration/providers) for all available options.
+    </Tip>
+  </Step>
+</Steps>
+
+## Frontend Setup
+
+<Steps>
+  <Step title="Navigate to web directory">
+    ```bash
+    cd ../web
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    npm install
+    ```
+
+    Core dependencies:
+    - `react` - UI framework
+    - `monaco-editor` - Code editor (VS Code's editor)
+    - `xterm` - Terminal emulator
+    - `tailwindcss` - Styling
+    - `vite` - Build tool
+  </Step>
+</Steps>
+
+## Running the Development Server
+
+### Option 1: Windows Batch Script (Recommended)
+
+From the project root:
+
+```bash
+./start-dev.bat
+```
+
+This automatically starts both backend and frontend servers.
+
+### Option 2: Manual (Two Terminals)
+
+**Terminal 1 - Backend:**
+```bash
+cd backend
+uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Terminal 2 - Frontend:**
+```bash
+cd web
+npm run dev
+```
+
+## Verify Installation
+
+<Steps>
+  <Step title="Open the application">
+    Navigate to [http://localhost:3000](http://localhost:3000)
+  </Step>
+
+  <Step title="Test the preloaded demo">
+    Click the play button to watch the sample walkthrough. This confirms:
+    - Frontend is rendering correctly
+    - Audio playback works
+    - Monaco editor is functional
+    - Timeline synchronization is working
+  </Step>
+
+  <Step title="Test generation pipeline">
+    In the chat panel, type:
+    ```
+    Create a simple Hello World in Python
+    ```
+    
+    Then click "Generate Walkthrough". This confirms:
+    - Backend API is accessible
+    - LLM provider is configured correctly
+    - TTS provider is working
+    - STT provider can extract timestamps
+    - Action synchronization is functional
+  </Step>
+</Steps>
+
+## Project Structure
+
+```bash
+vspeak/
+├── backend/                 # Python FastAPI Backend
+│   ├── clients/            # AI provider clients (LLM/TTS/STT)
+│   │   ├── __init__.py
+│   │   ├── cerebras_client.py   # LLM client
+│   │   ├── groq_client.py       # TTS/STT client
+│   │   └── gemini_client.py     # Alternative TTS client
+│   ├── pipeline/           # Generation pipeline stages
+│   │   ├── script_generator.py
+│   │   ├── audio_generator.py
+│   │   ├── gemini_audio_generator.py
+│   │   ├── timestamp_extractor.py
+│   │   └── action_sync.py
+│   ├── models/             # Pydantic data models
+│   │   ├── __init__.py
+│   │   └── types.py        # Core data structures
+│   ├── utils/              # Utility functions
+│   ├── config.py           # Configuration & provider selection
+│   ├── server.py           # FastAPI application
+│   ├── main.py             # CLI entry point
+│   └── requirements.txt
+│
+└── web/                     # React Frontend
+    ├── src/
+    │   ├── components/     # React components
+    │   │   ├── WalkthroughPlayer.tsx
+    │   │   ├── ChapterTimeline.tsx
+    │   │   └── ChatPanel.tsx
+    │   ├── editor/         # Monaco editor integration
+    │   │   ├── actionExecutor.ts
+    │   │   └── virtualFileSystem.ts
+    │   ├── terminal/       # Xterm.js terminal
+    │   │   └── terminalController.ts
+    │   ├── timeline/       # Audio sync scheduler
+    │   │   ├── scheduler.ts
+    │   │   └── types.ts
+    │   ├── api/            # Backend API client
+    │   ├── App.tsx
+    │   └── main.tsx
+    ├── package.json
+    └── vite.config.ts
+```
+
+## Development Workflow
+
+<Note>
+  Both servers support hot reload:
+  - Backend: `--reload` flag restarts on Python file changes
+  - Frontend: Vite automatically reloads on TypeScript/React changes
+</Note>
+
+### Making Changes
+
+1. **Backend Changes** - Edit files in `backend/`, server restarts automatically
+2. **Frontend Changes** - Edit files in `web/src/`, browser refreshes automatically
+3. **Configuration Changes** - Edit `backend/config.py`, restart backend server
+
+### Testing Your Changes
+
+```bash
+# Test backend pipeline directly
+cd backend
+python main.py --prompt "Create a React counter component"
+
+# Check output files
+ls output/
+```
+
+## Troubleshooting
+
+### Backend won't start
+
+**Check Python version:**
+```bash
+python --version  # Should be 3.11+
+```
+
+**Verify virtual environment:**
+```bash
+which python  # Should point to venv/bin/python
+```
+
+**Check API keys:**
+```bash
+cd backend
+python -c "from dotenv import load_dotenv; import os; load_dotenv(); print('Keys loaded:', bool(os.getenv('CEREBRAS_API_KEY')))"
+```
+
+### Frontend build errors
+
+**Clear node_modules:**
+```bash
+cd web
+rm -rf node_modules package-lock.json
+npm install
+```
+
+**Check Node version:**
+```bash
+node --version  # Should be 18+
+```
+
+### CORS errors
+
+Ensure backend is running on port 8000 and frontend on port 3000. Check `web/vite.config.ts` proxy settings.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="sitemap" href="/development/architecture">
+    Understand VSpeak's modular design
+  </Card>
+  <Card title="Adding Providers" icon="plug" href="/development/adding-providers">
+    Integrate new LLM/TTS/STT providers
+  </Card>
+  <Card title="Extending Actions" icon="code" href="/development/extending-actions">
+    Add custom IDE action types
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/overview">
+    Explore the complete API
+  </Card>
+</CardGroup>

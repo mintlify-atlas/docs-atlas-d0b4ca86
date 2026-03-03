@@ -1,0 +1,455 @@
+---
+title: Customizing Voice
+description: Learn about VSpeak's text-to-speech options, voice settings, and how narration quality affects your learning experience
+---
+
+# Customizing Voice
+
+VSpeak uses advanced text-to-speech (TTS) to narrate your coding walkthroughs. Understanding how voice generation works helps you get the best learning experience.
+
+## Current Voice System
+
+VSpeak uses **Gemini 2.5 Flash TTS** for natural-sounding, expressive narration.
+
+### Default Voice: Kore
+
+**Kore** is VSpeak's default voice:
+
+- **Tone:** Clear, professional, instructive
+- **Style:** Technical yet approachable
+- **Speed:** Moderate pace, ideal for coding tutorials
+- **Expression:** Natural emphasis on key concepts
+
+<Note>
+  Voice selection is currently configured on the **backend** in `config.py`. Future versions will allow users to choose voices from the UI.
+</Note>
+
+## Available TTS Providers
+
+VSpeak supports two TTS providers (configured in backend):
+
+<CardGroup cols={2}>
+  <Card title="Gemini TTS" icon="google">
+    **Model:** `gemini-2.5-flash-preview-tts`
+    
+    **Voices:** Zephyr, Puck, Charon, Kore, Fenrir, etc.
+    
+    **Quality:** High-quality, natural prosody
+    
+    **Current default:** ✓
+  </Card>
+  
+  <Card title="Orpheus TTS" icon="volume">
+    **Model:** `canopylabs/orpheus-v1-english`
+    
+    **Voice:** Austin
+    
+    **Quality:** Fast generation, supports vocal directions
+    
+    **Status:** Alternative option
+  </Card>
+</CardGroup>
+
+## How Voice Affects Your Experience
+
+### Natural Pacing
+
+The TTS system automatically:
+
+- **Pauses** at sentence boundaries
+- **Emphasizes** important keywords
+- **Varies** tone to keep narration engaging
+- **Synchronizes** with code actions
+
+This creates a **natural teaching rhythm** - like having a real instructor explain as they code.
+
+### Expressive Speech
+
+VSpeak's script generator includes **vocal directions** in the narration:
+
+| Direction | Effect | When Used |
+|-----------|--------|----------|
+| `[cheerful]` | Upbeat, positive tone | Introducing fun features |
+| `[excited]` | Energetic, enthusiastic | Showing cool techniques |
+| `[thoughtful]` | Reflective, explanatory | Explaining complex concepts |
+| `[encouraging]` | Supportive, motivating | Helping through difficult parts |
+| `[calm]` | Steady, reassuring | Technical deep-dives |
+| `[confident]` | Assured, authoritative | Best practices |
+
+<Tip>
+  These directions make walkthroughs feel more **human and engaging** - not like a monotone robot reading code!
+</Tip>
+
+## Playback Speed Control
+
+While you can't change the voice itself in the UI (yet), you **can** control playback speed:
+
+<Steps>
+  <Step title="Open Walkthrough Player">
+    Load any walkthrough to access the player.
+  </Step>
+  
+  <Step title="Click the speed button">
+    Look for the **1x** button in the player controls.
+  </Step>
+  
+  <Step title="Cycle through speeds">
+    Each click cycles to the next speed:
+    - 0.5x (half speed)
+    - 0.75x (slightly slow)
+    - 1x (normal) ← default
+    - 1.25x (slightly fast)
+    - 1.5x (fast)
+    - 2x (double speed)
+  </Step>
+</Steps>
+
+### When to Adjust Speed
+
+**Slow down (0.5x - 0.75x):**
+- Learning brand new concepts
+- Following along in your own editor
+- Complex code that needs careful reading
+- Non-native English speakers
+
+**Normal (1x):**
+- Standard learning pace
+- Balanced code/narration sync
+- Most walkthroughs work best at this speed
+
+**Speed up (1.25x - 2x):**
+- Reviewing walkthroughs you've seen before
+- Skimming through familiar concepts
+- Time-constrained learning sessions
+
+<Note>
+  At **2x speed**, the code typing animations also speed up proportionally, so everything stays in sync!
+</Note>
+
+## Backend Voice Configuration
+
+If you're running your own VSpeak instance, you can customize voice settings:
+
+### Changing Voice Provider
+
+In `backend/config.py`:
+
+```python
+# TTS Provider: "orpheus" or "gemini"
+TTS_PROVIDER = "gemini"  # Switch to "orpheus" for alternative voice
+```
+
+### Changing Gemini Voice
+
+In `backend/config.py`:
+
+```python
+# Gemini TTS Configuration
+GEMINI_TTS_VOICE = "Kore"  # Options: Zephyr, Puck, Charon, Kore, Fenrir
+```
+
+**Available Gemini voices:**
+
+<Tabs>
+  <Tab title="Kore (Default)">
+    **Character:** Professional instructor
+    
+    **Best for:** Technical tutorials, step-by-step guides
+    
+    **Tone:** Clear, authoritative, approachable
+  </Tab>
+  
+  <Tab title="Zephyr">
+    **Character:** Energetic teacher
+    
+    **Best for:** Fast-paced demos, exciting features
+    
+    **Tone:** Upbeat, dynamic
+  </Tab>
+  
+  <Tab title="Puck">
+    **Character:** Friendly guide
+    
+    **Best for:** Beginner-friendly content
+    
+    **Tone:** Warm, encouraging
+  </Tab>
+  
+  <Tab title="Charon">
+    **Character:** Serious expert
+    
+    **Best for:** Advanced topics, deep dives
+    
+    **Tone:** Focused, technical
+  </Tab>
+  
+  <Tab title="Fenrir">
+    **Character:** Confident mentor
+    
+    **Best for:** Best practices, architectural decisions
+    
+    **Tone:** Assured, experienced
+  </Tab>
+</Tabs>
+
+### Changing Orpheus Voice
+
+In `backend/config.py`:
+
+```python
+# Groq TTS Configuration (Orpheus)
+ORPHEUS_TTS_VOICE = "austin"  # Currently the main Orpheus voice
+```
+
+<Note>
+  After changing voice settings, **restart the backend server** for changes to take effect:
+  
+  ```bash
+  python server.py
+  ```
+</Note>
+
+## Audio Quality Settings
+
+VSpeak's TTS pipeline includes quality parameters:
+
+### Sample Rate
+
+```python
+SAMPLE_RATE = 24000  # 24kHz audio (backend/config.py)
+```
+
+- **24kHz** provides clear, natural-sounding speech
+- Lower sample rates (16kHz) generate faster but sound robotic
+- Higher rates (48kHz) offer minimal improvement for voice
+
+### Silence Padding
+
+```python
+SILENCE_PADDING_MS = 150  # Pause at sentence ends (backend/config.py)
+```
+
+- **150ms** creates natural breathing room between sentences
+- Increase for slower, more deliberate pacing
+- Decrease for faster, more compact narration
+
+### Crossfade Duration
+
+```python
+CROSSFADE_DURATION_MS = 50  # Smooth transitions (backend/config.py)
+```
+
+- **50ms** crossfades prevent audio "clicks" between chunks
+- Creates seamless narration flow
+
+## Volume Control
+
+While the walkthrough plays, you can adjust volume:
+
+### Using the Player
+
+1. Click the **speaker icon** to mute/unmute
+2. Drag the **volume slider** to adjust level (0-100%)
+3. Settings persist during the session
+
+### Using System Controls
+
+You can also use:
+- Browser tab volume controls (right-click tab)
+- Operating system volume mixer
+- Physical volume buttons on your device
+
+<Tip>
+  Set VSpeak to **70-80% volume** and use system volume for fine-tuning - this preserves your preferred VSpeak level across sessions.
+</Tip>
+
+## Vocal Directions (Advanced)
+
+If you're **modifying the script generator**, you can influence narration style:
+
+### How It Works
+
+VSpeak's script generator adds vocal directions to the narration text:
+
+```python
+"[cheerful] Let's build an amazing counter component!"
+"[thoughtful] Now, why would we use useReducer instead of useState?"
+"[excited] Watch this - the counter updates instantly!"
+```
+
+The TTS system interprets these directions to adjust:
+- Pitch variations
+- Speaking rate
+- Emotional tone
+- Emphasis patterns
+
+### Available Directions
+
+From `backend/config.py`:
+
+```python
+VOCAL_DIRECTIONS = [
+    "[cheerful]",
+    "[excited]", 
+    "[thoughtful]",
+    "[whisper]",
+    "[dramatic]",
+    "[encouraging]",
+    "[calm]",
+    "[enthusiastic]",
+    "[gentle]",
+    "[confident]"
+]
+```
+
+<Note>
+  Vocal directions work best with **Orpheus TTS**. Gemini TTS uses its own prosody model and may interpret these more subtly.
+</Note>
+
+## Future Voice Features
+
+Planned enhancements:
+
+<AccordionGroup>
+  <Accordion title="UI Voice Selection">
+    Choose your preferred voice directly from the VSpeak interface:
+    - Dropdown menu in settings
+    - Voice previews before generating
+    - Per-walkthrough voice selection
+  </Accordion>
+  
+  <Accordion title="Multi-Language Support">
+    Generate walkthroughs in different languages:
+    - Spanish, French, German, etc.
+    - Language-specific voices
+    - Automatic code comment translation
+  </Accordion>
+  
+  <Accordion title="Custom Voice Cloning">
+    Upload voice samples to create custom voices:
+    - Clone your own voice
+    - Clone your instructor's voice
+    - Share custom voice profiles
+  </Accordion>
+  
+  <Accordion title="Narration Style Presets">
+    Choose narration personalities:
+    - **Beginner-friendly** - slower, more explanatory
+    - **Advanced** - faster, assumes knowledge
+    - **Energetic** - upbeat and motivating
+    - **Focused** - minimal fluff, just code
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting Voice Issues
+
+<AccordionGroup>
+  <Accordion title="Audio sounds robotic">
+    This usually means:
+    - Wrong TTS provider (check `TTS_PROVIDER` in config.py)
+    - Low-quality voice selected
+    - Network issues during generation
+    
+    **Fix:**
+    1. Check `config.py` is set to `TTS_PROVIDER = "gemini"`
+    2. Regenerate the walkthrough
+    3. Check backend logs for TTS errors
+  </Accordion>
+  
+  <Accordion title="Voice is too fast/slow">
+    If the voice pace feels wrong at **1x speed**:
+    - Try adjusting to 0.75x or 1.25x
+    - If it's still off, the script generation may be creating too many/few words
+    - Check `TARGET_SCRIPT_DURATION_SECONDS` in config.py (default: 120 seconds)
+  </Accordion>
+  
+  <Accordion title="Audio and code out of sync">
+    If narration mentions code before/after it appears:
+    1. Pause and click **Reset**
+    2. Play again from the beginning
+    3. If still out of sync, regenerate the walkthrough
+    
+    This can happen if:
+    - Timestamp extraction failed
+    - Action synchronization had errors
+    - Audio was interrupted during generation
+  </Accordion>
+  
+  <Accordion title="No audio plays">
+    If you see the player but hear nothing:
+    - Check volume is not muted (speaker icon)
+    - Check browser isn't muted (tab icon)
+    - Check system audio is working
+    - Try clicking Play, then adjusting volume
+    - Check browser console for audio loading errors
+  </Accordion>
+  
+  <Accordion title="Vocal directions aren't working">
+    Vocal directions like `[cheerful]` work best with **Orpheus TTS**.
+    
+    If using Gemini TTS:
+    - Directions are stripped from the text
+    - Gemini uses its own natural prosody
+    - Narration will still sound natural, just without explicit direction control
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices for Voice Learning
+
+<Tabs>
+  <Tab title="First-Time Learners">
+    **Recommended settings:**
+    - Speed: **0.75x**
+    - Volume: **80%**
+    - Pause frequently to review code
+    
+    **Why:**
+    Slower pace gives you time to read code as it appears and absorb concepts.
+  </Tab>
+  
+  <Tab title="Experienced Developers">
+    **Recommended settings:**
+    - Speed: **1.25x**
+    - Volume: **70%**
+    - Jump between chapters
+    
+    **Why:**
+    Faster pace keeps you engaged while you focus on new patterns and techniques.
+  </Tab>
+  
+  <Tab title="Reviewing Material">
+    **Recommended settings:**
+    - Speed: **1.5x - 2x**
+    - Volume: **60%**
+    - Skip familiar chapters
+    
+    **Why:**
+    Quick review at high speed reinforces memory without re-learning basics.
+  </Tab>
+  
+  <Tab title="Accessibility Needs">
+    **Recommended settings:**
+    - Speed: **0.5x - 0.75x**
+    - Volume: **100%**
+    - Use chapter list to navigate
+    
+    **Why:**
+    Slower, clearer narration with full volume ensures nothing is missed.
+  </Tab>
+</Tabs>
+
+<Tip>
+  **Experiment with speeds!** Everyone learns differently - try 0.75x, 1x, and 1.25x to find your sweet spot.
+</Tip>
+
+## Summary
+
+While direct voice customization from the UI is coming in future updates, you can currently:
+
+✅ **Control playback speed** (0.5x - 2x)
+✅ **Adjust volume** (0-100%)
+✅ **Configure voice on backend** (Gemini voices, Orpheus)
+✅ **Benefit from expressive narration** (vocal directions)
+✅ **Enjoy high-quality TTS** (24kHz, natural prosody)
+
+For the best experience, use **1x speed** for new content and adjust from there based on your comfort level!

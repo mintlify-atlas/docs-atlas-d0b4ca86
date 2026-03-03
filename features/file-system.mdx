@@ -1,0 +1,445 @@
+---
+title: File System
+description: Virtual workspace and file management API for reading, writing, and organizing code
+---
+
+VSpeak provides a complete file system API for managing code files within walkthroughs and during chat interactions. Files are stored in a configurable workspace directory and exposed through REST endpoints.
+
+## Workspace Structure
+
+The backend maintains a workspace root directory:
+
+```python
+# From backend/server.py
+WORKSPACE_ROOT = Path(os.getenv("WORKSPACE_ROOT", Path.cwd() / "workspace"))
+WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
+```
+
+All file operations are scoped to this directory for security.
+
+<Note>
+By default, the workspace is `./workspace/` relative to the server. Set the `WORKSPACE_ROOT` environment variable to customize this.
+</Note>
+
+## File Operations API
+
+### List Files
+
+Get a hierarchical tree of all files in the workspace:
+
+**Endpoint**: `GET /api/files`
+
+**Response**:
+```json
+{
+  "files": [
+    {
+      "name": "src",
+      "path": "src",
+      "type": "directory",
+      "children": [
+        {
+          "name": "App.js",
+          "path": "src/App.js",
+          "type": "file"
+        }
+      ]
+    },
+    {
+      "name": "package.json",
+      "path": "package.json",
+      "type": "file"
+    }
+  ]
+}
+```
+
+**Implementation**:
+```python
+# From backend/server.py
+def get_file_tree(directory: Path, relative_to: Path) -> list[dict]:
+    """Recursively build file tree"""
+    items = []
+    for entry in sorted(directory.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower())):
+        if entry.name.startswith('.'):
+            continue  # Skip hidden files
+        
+        relative_path = str(entry.relative_to(relative_to)).replace("\\", "/")
+        
+        if entry.is_dir():
+            items.append({
+                "name": entry.name,
+                "path": relative_path,
+                "type": "directory",
+                "children": get_file_tree(entry, relative_to)
+            })
+        else:
+            items.append({
+                "name": entry.name,
+                "path": relative_path,
+                "type": "file"
+            })
+    return items
+```
+
+<Tip>
+Hidden files (starting with `.`) are automatically excluded from the tree.
+</Tip>
+
+### Read File
+
+Read the contents of a specific file:
+
+**Endpoint**: `GET /api/files/{file_path}`
+
+**Example**: `GET /api/files/src/App.js`
+
+**Response**:
+```json
+{
+  "path": "src/App.js",
+  "content": "import React from 'react';\n\nfunction App() {\n  return <h1>Hello</h1>;\n}\n\nexport default App;",
+  "language": "javascriptreact"
+}
+```
+
+**Language Detection**:
+```python
+# From backend/server.py
+def get_language_from_extension(filename: str) -> str:
+    ext_map = {
+        ".py": "python",
+        ".js": "javascript",
+        ".jsx": "javascriptreact",
+        ".ts": "typescript",
+        ".tsx": "typescriptreact",
+        ".json": "json",
+        ".html": "html",
+        ".css": "css",
+        ".md": "markdown",
+        ".yaml": "yaml",
+        ".yml": "yaml",
+        ".sh": "shell",
+        ".bash": "shell",
+        ".sql": "sql",
+        ".go": "go",
+        ".rs": "rust",
+        ".java": "java",
+        ".cpp": "cpp",
+        ".c": "c",
+        ".h": "c",
+        ".hpp": "cpp"
+    }
+    ext = Path(filename).suffix.lower()
+    return ext_map.get(ext, "plaintext")
+```
+
+### Write File
+
+Update an existing file's content:
+
+**Endpoint**: `PUT /api/files/{file_path}`
+
+**Body**:
+```json
+{
+  "content": "const greeting = 'Hello World';"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "path": "src/App.js"
+}
+```
+
+**Implementation**:
+```python
+@app.put("/api/files/{file_path:path}")
+async def write_file(file_path: str, content: str) -> dict:
+    full_path = WORKSPACE_ROOT / file_path
+    
+    # Create parent directories if needed
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    full_path.write_text(content, encoding="utf-8")
+    
+    return {"success": True, "path": file_path}
+```
+
+### Create File
+
+Create a new file:
+
+**Endpoint**: `POST /api/files/{file_path}`
+
+**Body** (optional):
+```json
+{
+  "content": "// Initial content"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "path": "src/components/Button.jsx"
+}
+```
+
+**Error Handling**:
+```python
+@app.post("/api/files/{file_path:path}")
+async def create_file(file_path: str, content: str = "") -> dict:
+    full_path = WORKSPACE_ROOT / file_path
+    
+    if full_path.exists():
+        raise HTTPException(status_code=409, detail=f"File already exists: {file_path}")
+    
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_text(content, encoding="utf-8")
+    
+    return {"success": True, "path": file_path}
+```
+
+### Delete File
+
+Delete a file or directory:
+
+**Endpoint**: `DELETE /api/files/{file_path}`
+
+**Response**:
+```json
+{
+  "success": true,
+  "path": "src/old-component.js"
+}
+```
+
+**Directory Deletion**:
+```python
+@app.delete("/api/files/{file_path:path}")
+async def delete_file(file_path: str) -> dict:
+    full_path = WORKSPACE_ROOT / file_path
+    
+    if not full_path.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+    
+    if full_path.is_dir():
+        import shutil
+        shutil.rmtree(full_path)  # Recursively delete directory
+    else:
+        full_path.unlink()  # Delete file
+    
+    return {"success": True, "path": file_path}
+```
+
+### Create Directory
+
+Create a new directory:
+
+**Endpoint**: `POST /api/files/mkdir/{dir_path}`
+
+**Example**: `POST /api/files/mkdir/src/components`
+
+**Response**:
+```json
+{
+  "success": true,
+  "path": "src/components"
+}
+```
+
+**Implementation**:
+```python
+@app.post("/api/files/mkdir/{dir_path:path}")
+async def create_directory(dir_path: str) -> dict:
+    full_path = WORKSPACE_ROOT / dir_path
+    full_path.mkdir(parents=True, exist_ok=True)
+    return {"success": True, "path": dir_path}
+```
+
+## Virtual File System (Frontend)
+
+The web interface uses a virtual file system for walkthroughs:
+
+```typescript
+// From web/src/editor/virtualFileSystem.ts
+class VirtualFileSystem {
+  private files = new Map<string, monaco.editor.ITextModel>();
+  private monaco: typeof monaco | null = null;
+  private openedPath: string | null = null;
+
+  attach(monacoInstance: typeof monaco) {
+    this.monaco = monacoInstance;
+  }
+
+  createFile(path: string, content: string) {
+    if (!this.monaco) return;
+    
+    const uri = this.monaco.Uri.file(path);
+    const language = this.getLanguageFromPath(path);
+    const model = this.monaco.editor.createModel(content, language, uri);
+    
+    this.files.set(path, model);
+  }
+
+  openFile(path: string): monaco.editor.ITextModel | undefined {
+    return this.files.get(path);
+  }
+
+  markOpened(path: string) {
+    this.openedPath = path;
+  }
+
+  getOpenedPath(): string | null {
+    return this.openedPath;
+  }
+
+  reset() {
+    // Dispose all models
+    this.files.forEach(model => model.dispose());
+    this.files.clear();
+    this.openedPath = null;
+  }
+
+  dispose() {
+    this.reset();
+    this.monaco = null;
+  }
+}
+```
+
+<Note>
+The virtual file system is **ephemeral**: it exists only during walkthrough playback and is reset between sessions.
+</Note>
+
+## Security Considerations
+
+### Path Traversal Prevention
+
+All file paths are resolved relative to `WORKSPACE_ROOT`:
+
+```python
+# Malicious attempt
+GET /api/files/../../etc/passwd
+
+# Resolved to:
+WORKSPACE_ROOT / "../../etc/passwd"
+# Which normalizes to somewhere inside WORKSPACE_ROOT
+```
+
+### Binary File Detection
+
+Binary files are rejected to prevent encoding errors:
+
+```python
+try:
+    content = full_path.read_text(encoding="utf-8")
+except UnicodeDecodeError:
+    raise HTTPException(status_code=400, detail="Cannot read binary file")
+```
+
+### File Size Limits
+
+<Tip>
+Consider adding file size limits in production to prevent resource exhaustion.
+</Tip>
+
+## Language Support
+
+VSpeak automatically detects file language for syntax highlighting:
+
+| Extension | Language |
+|-----------|----------|
+| `.py` | Python |
+| `.js` | JavaScript |
+| `.jsx` | JavaScript React |
+| `.ts` | TypeScript |
+| `.tsx` | TypeScript React |
+| `.html` | HTML |
+| `.css` | CSS |
+| `.json` | JSON |
+| `.md` | Markdown |
+| `.yaml`, `.yml` | YAML |
+| `.sh`, `.bash` | Shell |
+| `.sql` | SQL |
+| `.go` | Go |
+| `.rs` | Rust |
+| `.java` | Java |
+| `.c`, `.h` | C |
+| `.cpp`, `.hpp` | C++ |
+
+## Usage Examples
+
+### Fetch and Display File Tree
+
+```typescript
+const response = await fetch('http://localhost:8000/api/files');
+const { files } = await response.json();
+
+function renderTree(files: any[]) {
+  return (
+    <ul>
+      {files.map(file => (
+        <li key={file.path}>
+          {file.type === 'directory' ? '📁' : '📄'} {file.name}
+          {file.children && renderTree(file.children)}
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+### Read and Edit File
+
+```typescript
+// Read
+const res = await fetch('http://localhost:8000/api/files/src/App.js');
+const { content, language } = await res.json();
+
+// Edit
+await fetch('http://localhost:8000/api/files/src/App.js', {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ content: updatedCode })
+});
+```
+
+### Create Project Structure
+
+```typescript
+const structure = [
+  { type: 'dir', path: 'src' },
+  { type: 'dir', path: 'src/components' },
+  { type: 'file', path: 'src/index.js', content: 'console.log("Hello");' },
+  { type: 'file', path: 'src/components/App.jsx', content: 'export default function App() {}' },
+];
+
+for (const item of structure) {
+  if (item.type === 'dir') {
+    await fetch(`http://localhost:8000/api/files/mkdir/${item.path}`, { method: 'POST' });
+  } else {
+    await fetch(`http://localhost:8000/api/files/${item.path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: item.content })
+    });
+  }
+}
+```
+
+## Related Features
+
+<CardGroup cols={2}>
+  <Card title="IDE Actions" icon="wand-magic-sparkles" href="/features/ide-actions">
+    File operations during walkthroughs
+  </Card>
+  <Card title="Chat Mode" icon="comment" href="/features/chat-mode">
+    AI assistance with file editing
+  </Card>
+</CardGroup>

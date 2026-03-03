@@ -1,0 +1,225 @@
+---
+title: TerminalController
+description: Terminal emulator integration using xterm.js
+---
+
+## Overview
+
+The `TerminalController` wraps xterm.js to provide a terminal emulator for VSpeak's walkthrough interface. It handles mounting, resizing, writing output, and displaying commands.
+
+The controller uses the [xterm.js](https://xtermjs.org/) library with the FitAddon for automatic terminal resizing.
+
+## Constructor
+
+```typescript
+new TerminalController()
+```
+
+Creates a new terminal controller with preconfigured settings:
+- **Size**: 80 columns × 18 rows
+- **Font**: Cascadia Code, Consolas, Menlo (fallback to monospace)
+- **Font size**: 13px
+- **Theme**: VS Code dark theme colors
+- **Features**: Convert EOL, cursor blink enabled
+
+### Example
+
+```typescript
+const terminal = new TerminalController();
+```
+
+## Methods
+
+### mount(container)
+
+Mounts the terminal into a DOM container element.
+
+<ParamField path="container" type="HTMLDivElement" required>
+  The container element to render the terminal into
+</ParamField>
+
+```typescript
+const terminalContainer = document.getElementById('terminal') as HTMLDivElement;
+terminal.mount(terminalContainer);
+```
+
+**Behavior:**
+- Opens the xterm terminal in the container
+- Fits the terminal to container size
+- Adds window resize listener for auto-fitting
+- Calling mount on an already-mounted container is a no-op
+
+### dispose()
+
+Cleans up the terminal instance and removes event listeners.
+
+```typescript
+terminal.dispose();
+```
+
+**Note:** Always call `dispose()` when the terminal is no longer needed to prevent memory leaks.
+
+### runCommand(command)
+
+Displays a command with a shell prompt prefix.
+
+<ParamField path="command" type="string" required>
+  The command to display
+</ParamField>
+
+```typescript
+terminal.runCommand('npm install');
+// Output: $ npm install
+```
+
+The command is automatically prefixed with `$ ` and followed by a newline for a shell-like appearance.
+
+### write(text)
+
+Writes text to the terminal with automatic line ending conversion.
+
+<ParamField path="text" type="string" required>
+  Text to write to the terminal
+</ParamField>
+
+```typescript
+terminal.write('Installing dependencies...\n');
+terminal.write('Done!\n');
+```
+
+**Line ending handling:**
+- Converts Unix line feeds (`\n`) to carriage return + line feed (`\r\n`)
+- Ensures proper line wrapping in the terminal
+
+### clear()
+
+Clears all terminal content.
+
+```typescript
+terminal.clear();
+```
+
+## Terminal Configuration
+
+The controller initializes xterm with these settings:
+
+```typescript
+const term = new Terminal({
+  cols: 80,
+  rows: 18,
+  convertEol: true,           // Auto-convert line endings
+  cursorBlink: true,          // Blinking cursor
+  fontFamily: 'Cascadia Code, Consolas, Menlo, monospace',
+  fontSize: 13,
+  theme: {
+    background: '#1b1b1b',    // VS Code dark background
+    foreground: '#d4d4d4',    // Light gray text
+    cursor: '#0e639c',        // Blue cursor
+    selectionBackground: '#264f78', // Selection highlight
+  },
+});
+```
+
+## Usage in VSpeak
+
+In VSpeak's main app (web/src/App.tsx:261), the terminal is created and attached to both the DOM and the ActionExecutor:
+
+```typescript
+const container = terminalContainerRef.current;
+const executor = executorRef.current;
+
+const controller = new TerminalController();
+controller.mount(container);
+executor.attachTerminal(controller);
+
+// Cleanup on unmount
+return () => {
+  controller.dispose();
+  executor.attachTerminal(null);
+};
+```
+
+The executor then uses the terminal for `terminal_run`, `terminal_output`, and `clear_terminal` timeline actions:
+
+```typescript
+// From ActionExecutor
+case 'terminal_run':
+  this.terminal?.runCommand(action.command);
+  break;
+case 'terminal_output':
+  this.terminal?.write(action.text);
+  break;
+case 'clear_terminal':
+  this.terminal?.clear();
+  break;
+```
+
+## Timeline Action Examples
+
+<Tabs>
+  <Tab title="Run Command">
+    ```typescript
+    {
+      kind: 'terminal_run',
+      timeMs: 1000,
+      command: 'npm install express'
+    }
+    ```
+    
+    Output:
+    ```
+    $ npm install express
+    ```
+  </Tab>
+  
+  <Tab title="Write Output">
+    ```typescript
+    {
+      kind: 'terminal_output',
+      timeMs: 1500,
+      text: 'added 50 packages in 2s\n'
+    }
+    ```
+    
+    Output:
+    ```
+    added 50 packages in 2s
+    ```
+  </Tab>
+  
+  <Tab title="Clear Terminal">
+    ```typescript
+    {
+      kind: 'clear_terminal',
+      timeMs: 5000
+    }
+    ```
+    
+    Clears all previous content
+  </Tab>
+</Tabs>
+
+## Auto-Resizing
+
+The controller automatically handles window resize events using xterm's FitAddon:
+
+```typescript
+private resizeHandler = () => this.fitAddon.fit();
+
+// On mount
+window.addEventListener('resize', this.resizeHandler);
+
+// On dispose
+window.removeEventListener('resize', this.resizeHandler);
+```
+
+This ensures the terminal always fits its container, even when the window is resized.
+
+## Implementation Details
+
+- **Library**: Built on [xterm.js](https://xtermjs.org/) v5+
+- **Addons**: Uses `@xterm/addon-fit` for automatic sizing
+- **Line endings**: Converts `\n` → `\r\n` for proper terminal display
+- **Resize handling**: Debounced via browser's native event handling
+- **Memory management**: Proper cleanup via `dispose()` prevents leaks
+- **Read-only**: Terminal is display-only (no input handling)

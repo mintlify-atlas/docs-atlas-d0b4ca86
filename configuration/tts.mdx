@@ -1,0 +1,371 @@
+---
+title: "Text-to-Speech Configuration"
+description: "Configure Gemini and Orpheus TTS for audio narration generation"
+---
+
+VSpeak supports two text-to-speech providers: Gemini 2.5 Flash and Groq Orpheus. This guide covers configuration for both providers.
+
+## Selecting a TTS Provider
+
+**Location:** `backend/config.py:21`
+
+```python
+TTS_PROVIDER = "gemini"  # Switch between "gemini" or "orpheus"
+```
+
+<ParamField path="TTS_PROVIDER" type="string" default="gemini">
+  The active TTS provider. Options:
+  - `"gemini"`: Use Gemini 2.5 Flash Preview TTS
+  - `"orpheus"`: Use Groq's Orpheus TTS
+</ParamField>
+
+<Tabs>
+  <Tab title="Gemini TTS">
+    **Best for:** Full script narration without chunking
+    
+    **Advantages:**
+    - No chunking required (handles long text)
+    - Director's notes for tone/style control
+    - Multiple voice profiles
+    - High-quality 24kHz output
+    
+    **Limitations:**
+    - No vocal direction support (use director's notes instead)
+  </Tab>
+  
+  <Tab title="Orpheus TTS">
+    **Best for:** Chunked narration with dynamic vocal expressions
+    
+    **Advantages:**
+    - Vocal directions (cheerful, excited, whisper, etc.)
+    - Fast generation
+    - 24kHz output
+    - Low latency
+    
+    **Limitations:**
+    - Requires text chunking (100-150 chars)
+    - Limited voice options
+  </Tab>
+</Tabs>
+
+## Gemini TTS Configuration
+
+### Model & Voice Settings
+
+**Location:** `backend/config.py:29-30`
+
+```python
+GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts"
+GEMINI_TTS_VOICE = "Kore"  # Options: Zephyr, Puck, Charon, Kore, Fenrir, etc.
+```
+
+<ParamField path="GEMINI_TTS_MODEL" type="string" default="gemini-2.5-flash-preview-tts">
+  The Gemini model for TTS generation. This is currently the only available model.
+</ParamField>
+
+<ParamField path="GEMINI_TTS_VOICE" type="string" default="Kore">
+  Voice profile for Gemini TTS narration.
+</ParamField>
+
+### Available Voices
+
+| Voice | Characteristics | Best For |
+|-------|----------------|----------|
+| **Kore** | Warm, friendly | Educational content, tutorials |
+| **Zephyr** | Clear, professional | Technical documentation |
+| **Puck** | Energetic, upbeat | Engaging walkthroughs |
+| **Charon** | Deep, authoritative | Serious topics |
+| **Fenrir** | Dynamic, expressive | Interactive content |
+
+### Director's Notes
+
+Gemini TTS supports director's notes to control narration style, tone, and pacing.
+
+**Location:** `backend/clients/gemini_client.py:82-108`
+
+```python
+CODING_COACH_DIRECTOR_NOTES = """
+# AUDIO PROFILE: Code Coach
+## "The Friendly Developer Mentor"
+
+## THE SCENE: Virtual Coding Session
+You're in a comfortable virtual pair-programming session with a student.
+
+### DIRECTOR'S NOTES
+
+Style:
+* Warm and encouraging mentor tone
+* Clear articulation of technical terms
+* Natural enthusiasm when something works
+* Patient and supportive when explaining concepts
+
+Pacing:
+* Moderate pace overall - clear enough for learners
+* Slightly slower when introducing new concepts
+* Pick up pace during exciting moments
+
+Accent: Clear, neutral American English with slight warmth
+"""
+```
+
+### Using Director's Notes
+
+```python
+from clients.gemini_client import GeminiTTSClient
+
+client = GeminiTTSClient()
+
+# Generate speech with custom director's notes
+latency = client.generate_speech(
+    text="Let's create a new Python file and write our first function.",
+    output_path="narration.wav",
+    voice="Kore",
+    director_notes="""Style: Enthusiastic teacher
+    Pacing: Moderate with pauses for clarity
+    Accent: Clear American English"""
+)
+```
+
+<Note>
+Director's notes are prepended to the transcript and guide the AI's narration style. Experiment with different notes to find the perfect voice for your content.
+</Note>
+
+### Audio Output Settings
+
+**Location:** `backend/clients/gemini_client.py:72-79`
+
+```python
+channels = 1        # Mono audio
+rate = 24000        # 24kHz sample rate
+sample_width = 2    # 16-bit audio
+```
+
+<ParamField path="channels" type="integer" default="1">
+  Audio channels (1 = mono, 2 = stereo). Gemini TTS outputs mono.
+</ParamField>
+
+<ParamField path="rate" type="integer" default="24000">
+  Sample rate in Hz. 24kHz provides high-quality audio.
+</ParamField>
+
+<ParamField path="sample_width" type="integer" default="2">
+  Sample width in bytes (2 = 16-bit audio).
+</ParamField>
+
+## Orpheus TTS Configuration
+
+### Model & Voice Settings
+
+**Location:** `backend/config.py:24-26`
+
+```python
+ORPHEUS_TTS_MODEL = "canopylabs/orpheus-v1-english"
+ORPHEUS_TTS_VOICE = "austin"
+TTS_RESPONSE_FORMAT = "wav"
+```
+
+<ParamField path="ORPHEUS_TTS_MODEL" type="string" default="canopylabs/orpheus-v1-english">
+  The Orpheus TTS model identifier. Currently supports English only.
+</ParamField>
+
+<ParamField path="ORPHEUS_TTS_VOICE" type="string" default="austin">
+  Voice profile for Orpheus TTS. "austin" is currently the primary supported voice.
+</ParamField>
+
+<ParamField path="TTS_RESPONSE_FORMAT" type="string" default="wav">
+  Audio output format. WAV is recommended for quality and compatibility.
+</ParamField>
+
+### Vocal Directions
+
+Orpheus TTS supports inline vocal directions to control narration expression.
+
+**Location:** `backend/config.py:46-57`
+
+```python
+VOCAL_DIRECTIONS = [
+    "[cheerful]",
+    "[excited]", 
+    "[thoughtful]",
+    "[whisper]",
+    "[dramatic]",
+    "[encouraging]",
+    "[calm]",
+    "[enthusiastic]",
+    "[gentle]",
+    "[confident]"
+]
+```
+
+### Using Vocal Directions
+
+```python
+# Include vocal directions in narration text
+narration = "[excited] Now watch what happens when we run the code!"
+
+# Another example
+narration = "[thoughtful] Let's think about how we can improve this function."
+
+# You can chain directions
+narration = "[encouraging] Great job! [cheerful] Let's move on to the next step."
+```
+
+<Warning>
+Vocal directions ONLY work with Orpheus TTS. They are ignored by Gemini TTS. For Gemini, use director's notes instead.
+</Warning>
+
+### Vocal Direction Guide
+
+| Direction | Effect | Best For |
+|-----------|--------|----------|
+| `[cheerful]` | Upbeat, positive tone | Successes, completed tasks |
+| `[excited]` | High energy, enthusiastic | Exciting moments, "aha" discoveries |
+| `[thoughtful]` | Contemplative, slower | Problem-solving, analysis |
+| `[whisper]` | Soft, intimate | Asides, tips, secrets |
+| `[dramatic]` | Intense, impactful | Important warnings, key concepts |
+| `[encouraging]` | Supportive, motivating | Overcoming challenges |
+| `[calm]` | Soothing, relaxed | Complex explanations |
+| `[enthusiastic]` | Energetic, engaged | Introductions, new topics |
+| `[gentle]` | Soft, patient | Beginner-friendly content |
+| `[confident]` | Assured, authoritative | Definitive statements |
+
+## Audio Processing Settings
+
+**Location:** `backend/config.py:41-43`
+
+```python
+CROSSFADE_DURATION_MS = 50  # Crossfade between chunks
+SILENCE_PADDING_MS = 150    # Silence padding at sentence ends
+SAMPLE_RATE = 24000         # Audio sample rate
+```
+
+<ParamField path="CROSSFADE_DURATION_MS" type="integer" default="50">
+  Duration of crossfade effect between audio chunks in milliseconds. Creates smooth transitions.
+</ParamField>
+
+<ParamField path="SILENCE_PADDING_MS" type="integer" default="150">
+  Silence padding added at sentence boundaries in milliseconds. Prevents rushed narration.
+</ParamField>
+
+<ParamField path="SAMPLE_RATE" type="integer" default="24000">
+  Audio sample rate in Hz. Both Gemini and Orpheus output 24kHz audio.
+</ParamField>
+
+<Note>
+These settings apply to audio post-processing and stitching, regardless of TTS provider.
+</Note>
+
+## Usage Examples
+
+### Gemini TTS Example
+
+```python
+from clients.gemini_client import GeminiTTSClient, CODING_COACH_DIRECTOR_NOTES
+from pathlib import Path
+
+# Initialize client
+client = GeminiTTSClient()
+
+# Generate speech for full script
+text = """Let's build a FastAPI endpoint. First, we'll import the 
+FastAPI library and create our app instance."""
+
+latency = client.generate_speech(
+    text=text,
+    output_path=Path("output/narration.wav"),
+    voice="Kore",
+    director_notes=CODING_COACH_DIRECTOR_NOTES
+)
+
+print(f"Generated audio in {latency:.2f}ms")
+```
+
+### Orpheus TTS Example
+
+```python
+from clients import GroqTTSClient
+from pathlib import Path
+
+# Initialize client
+client = GroqTTSClient()
+
+# Generate speech for a chunk (100-150 chars)
+text = "[cheerful] Great! Now let's run our code and see what happens."
+
+latency = client.generate_speech(
+    text=text,
+    output_path=Path("output/chunk_01.wav")
+)
+
+print(f"Generated audio in {latency:.2f}ms")
+```
+
+## Provider Comparison
+
+| Feature | Gemini TTS | Orpheus TTS |
+|---------|------------|-------------|
+| **Chunking Required** | No | Yes (100-150 chars) |
+| **Vocal Directions** | ❌ | ✅ |
+| **Director's Notes** | ✅ | ❌ |
+| **Voice Options** | 5+ voices | 1 voice (austin) |
+| **Sample Rate** | 24kHz | 24kHz |
+| **Output Format** | WAV | WAV |
+| **Best For** | Full scripts | Short chunks |
+| **Latency** | Medium | Low |
+
+## Configuration Best Practices
+
+<AccordionGroup>
+  <Accordion title="Choosing a Provider">
+    **Use Gemini TTS when:**
+    - Generating full-script narration
+    - You need fine-grained tone control
+    - You want multiple voice options
+    - Chunking overhead is undesirable
+    
+    **Use Orpheus TTS when:**
+    - Working with pre-chunked scripts
+    - You need dynamic vocal expressions
+    - Low latency is critical
+    - You want inline vocal directions
+  </Accordion>
+  
+  <Accordion title="Optimizing Audio Quality">
+    - Use 24kHz sample rate (default)
+    - Apply 50ms crossfade for smooth transitions
+    - Add 150ms silence padding at sentences
+    - Test different voices for your content type
+    - Write director's notes specific to your topic
+  </Accordion>
+  
+  <Accordion title="Voice Selection">
+    - **Educational**: Kore, Zephyr
+    - **Enthusiastic**: Puck, Fenrir
+    - **Professional**: Zephyr, Charon
+    - **Friendly**: Kore
+    - Test voices with sample content before committing
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<Warning>
+**Common Issues:**
+
+1. **Choppy audio**: Increase `CROSSFADE_DURATION_MS`
+2. **Rushed narration**: Increase `SILENCE_PADDING_MS`
+3. **Vocal directions ignored**: Ensure using Orpheus TTS, not Gemini
+4. **Director's notes not working**: Ensure using Gemini TTS, not Orpheus
+5. **Low quality audio**: Verify `SAMPLE_RATE = 24000`
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="STT Configuration" icon="waveform" href="/configuration/stt">
+    Configure speech-to-text settings
+  </Card>
+  <Card title="Environment Variables" icon="key" href="/configuration/environment">
+    Set up TTS API keys
+  </Card>
+</CardGroup>

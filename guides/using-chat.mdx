@@ -1,0 +1,398 @@
+---
+title: Using Chat
+description: Learn how to use VSpeak's AI chat for quick questions, explanations, and toggling between chat and walkthrough modes
+---
+
+# Using Chat
+
+VSpeak includes an AI chat assistant that can answer coding questions, explain concepts, and - when in Walkthrough mode - generate audio-narrated demonstrations.
+
+## Opening the Chat Panel
+
+The chat panel is on the **right side** of the IDE:
+
+- If you see it, you're ready to chat!
+- If it's hidden, click the **chat icon** (speech bubble) in the activity bar on the left
+
+<Tip>
+  You can toggle the chat panel on/off to give yourself more screen space for the editor.
+</Tip>
+
+## The Two Chat Modes
+
+VSpeak operates in two distinct modes:
+
+<CardGroup cols={2}>
+  <Card title="Walkthrough Mode" icon="play">
+    **Best for:** Learning new concepts, seeing how to build something
+    
+    **You get:** Audio-narrated coding demonstrations
+    
+    **Toggle:** ON (green indicator)
+  </Card>
+  
+  <Card title="Chat Mode" icon="message">
+    **Best for:** Quick questions, explanations, debugging help
+    
+    **You get:** Text responses (no audio/demo)
+    
+    **Toggle:** OFF (gray indicator)
+  </Card>
+</CardGroup>
+
+### Switching Between Modes
+
+Look for the **Walkthrough** toggle in the chat header:
+
+```
+┌─────────────────────────────────────┐
+│ AI Coach                [🎬] Walkthrough ●ON  │ <- Click to toggle
+└─────────────────────────────────────┘
+```
+
+- **Green indicator** = Walkthrough mode (generates demos)
+- **Gray indicator** = Chat mode (text only)
+
+Click the toggle to switch modes at any time!
+
+## Using Chat Mode
+
+### When to Use Chat Mode
+
+Use Chat mode (toggle OFF) for:
+
+- **Quick questions:** "What does async/await do?"
+- **Code explanations:** "Explain this error message"
+- **Concept clarifications:** "What's the difference between let and const?"
+- **Follow-up questions:** After watching a walkthrough
+
+### How to Chat
+
+<Steps>
+  <Step title="Turn Walkthrough mode OFF">
+    Click the Walkthrough toggle so it shows a gray indicator.
+    
+    The input placeholder will change to "Ask a question..."
+  </Step>
+  
+  <Step title="Type your question">
+    Type in the chat input at the bottom of the panel.
+    
+    Examples:
+    - "What are React hooks?"
+    - "How do I center a div with CSS?"
+    - "Explain closures in JavaScript"
+  </Step>
+  
+  <Step title="Send your message">
+    Press **Enter** or click the **send button** (paper airplane icon).
+    
+    Shift+Enter adds a new line without sending.
+  </Step>
+  
+  <Step title="Read the response">
+    The AI will respond with a text explanation. You can:
+    - Copy code snippets from the response
+    - Ask follow-up questions
+    - Switch to Walkthrough mode to see a demo
+  </Step>
+</Steps>
+
+### Chat Features
+
+**Multi-line input:**
+- Press **Shift+Enter** to add line breaks
+- Useful for longer questions or including code samples
+
+**Auto-scroll:**
+- Chat automatically scrolls to new messages
+- Scroll up to read message history
+
+**Message history:**
+- All messages persist during your session
+- Scroll up to review previous questions and answers
+
+<Note>
+  Chat mode uses the same AI model as walkthroughs, but responses are **much faster** since it doesn't generate audio or synchronize actions.
+</Note>
+
+## Using Walkthrough Mode
+
+### When to Use Walkthrough Mode
+
+Use Walkthrough mode (toggle ON) for:
+
+- **Learning by watching:** See code being written step-by-step
+- **Understanding workflows:** Watch file creation, terminal commands, etc.
+- **Audio narration:** Hear explanations while code appears
+- **Chapter navigation:** Jump to specific parts of the demonstration
+
+See [Creating Walkthroughs](/guides/creating-walkthroughs) for a complete guide.
+
+### Quick Walkthrough Request
+
+<Steps>
+  <Step title="Turn Walkthrough mode ON">
+    Click the toggle so it shows a green indicator.
+    
+    You'll see a hint: "Walkthrough mode - I'll create a guided demo with voice narration"
+  </Step>
+  
+  <Step title="Ask for a demonstration">
+    Use phrases like:
+    - "Show me how to..."
+    - "Walk me through..."
+    - "Demonstrate..."
+    
+    Example: `Show me how to create a responsive navbar`
+  </Step>
+  
+  <Step title="Wait for generation">
+    The AI will show progress:
+    - Thinking...
+    - Generating script...
+    - Creating audio...
+    - Syncing actions...
+    
+    This takes 10-20 seconds.
+  </Step>
+  
+  <Step title="Play the walkthrough">
+    When ready, click the **Play** button in the Walkthrough Player above the chat.
+  </Step>
+</Steps>
+
+## Chat Input Tips
+
+### Making Your Questions Clear
+
+<Tabs>
+  <Tab title="Be Specific">
+    ❌ **Vague:** "Tell me about React"
+    
+    ✅ **Specific:** "What's the difference between useState and useReducer in React?"
+    
+    ---
+    
+    ❌ **Vague:** "CSS help"
+    
+    ✅ **Specific:** "How do I make a sticky header with CSS?"
+  </Tab>
+  
+  <Tab title="Include Context">
+    ❌ **No context:** "Why isn't this working?"
+    
+    ✅ **With context:** "I'm getting a 'Cannot read property of undefined' error when fetching API data. What could cause this?"
+    
+    ---
+    
+    ❌ **No context:** "Best practices?"
+    
+    ✅ **With context:** "What are best practices for managing state in a large React app?"
+  </Tab>
+  
+  <Tab title="Use Technical Terms">
+    ✅ Mention frameworks, libraries, versions:
+    - "Show me async/await in Node.js"
+    - "Walk me through Tailwind CSS grid classes"
+    - "Demonstrate React useEffect cleanup"
+    
+    This helps the AI give you more accurate, relevant responses.
+  </Tab>
+</Tabs>
+
+### Chat vs. Walkthrough: Choosing the Right Mode
+
+| Your Goal | Use This Mode | Why |
+|-----------|---------------|-----|
+| Quick definition | Chat | Faster response, no need for demo |
+| See how to build something | Walkthrough | Visual demonstration with audio |
+| Debug an error | Chat | Text explanation is sufficient |
+| Learn a new pattern | Walkthrough | Watching code appear helps understanding |
+| Compare two approaches | Chat | Text comparison is clearer |
+| Understand workflow (files, commands, etc.) | Walkthrough | See the full process in action |
+
+<Tip>
+  **Pro workflow:** Use Walkthrough mode to learn something new, then switch to Chat mode to ask follow-up questions!
+</Tip>
+
+## Understanding Chat Responses
+
+### In Chat Mode
+
+Text responses may include:
+
+- **Explanations** of concepts
+- **Code snippets** (you can select and copy these)
+- **Step-by-step instructions**
+- **Links** to relevant resources
+
+### In Walkthrough Mode
+
+After generation completes, you'll see:
+
+- A message confirming the walkthrough is ready
+- A **"Walkthrough ready"** badge
+- The Walkthrough Player becomes active with Play/Pause controls
+
+## Session Management
+
+### Chat Sessions
+
+Your chat conversation is stored in a **session**:
+
+- Messages persist as you switch between Chat and Walkthrough modes
+- Sessions are currently **browser-only** (not saved to backend)
+- Refreshing the page starts a new session
+
+<Note>
+  Currently, chat history is lost on page refresh. Save important code snippets or responses before refreshing!
+</Note>
+
+### Multiple Walkthroughs
+
+You can request multiple walkthroughs in the same session:
+
+1. Watch the first walkthrough
+2. Request another one
+3. The new walkthrough **replaces** the current one in the player
+4. Your chat history shows all requests
+
+<Tip>
+  Each walkthrough is independent. Use chat history to remember what you've already learned!
+</Tip>
+
+## Backend Connection Status
+
+The chat header shows a **connection indicator**:
+
+| Indicator | Meaning | What to Do |
+|-----------|---------|------------|
+| ✓ (no warning) | Connected | Everything works normally |
+| ⚠ Warning icon | Disconnected | Chat won't work - check that backend server is running |
+
+If you see the warning:
+
+1. Make sure the backend server is running at `localhost:8000`
+2. Check the browser console for connection errors
+3. Try refreshing the page
+
+## Input Limitations
+
+While a walkthrough is **playing**, the chat input is disabled:
+
+- You can't send new messages while audio is playing
+- **Pause** the walkthrough to unlock the input
+- This prevents conflicts between playback and new requests
+
+<Note>
+  You can still scroll through chat history while a walkthrough plays - just can't send new messages.
+</Note>
+
+## Advanced Chat Tips
+
+<AccordionGroup>
+  <Accordion title="Ask follow-up questions after a walkthrough">
+    After watching a walkthrough:
+    1. Switch to **Chat mode** (toggle off)
+    2. Ask questions about what you just watched
+    3. The AI remembers the context from the walkthrough
+    
+    Example:
+    - Walkthrough: "Show me useState"
+    - Follow-up: "What happens if I call setState multiple times in a row?"
+  </Accordion>
+  
+  <Accordion title="Use chat for quick syntax checks">
+    Instead of creating a full walkthrough:
+    
+    Chat mode:
+    - "What's the syntax for array map in JavaScript?"
+    - "How do I import a component in React?"
+    - "Show me the fetch API syntax"
+    
+    Much faster than generating a demo!
+  </Accordion>
+  
+  <Accordion title="Combine modes for deep learning">
+    1. **Walkthrough mode:** "Show me how to build a form"
+    2. Watch the demo
+    3. **Chat mode:** "How would I add validation to this form?"
+    4. **Walkthrough mode:** "Show me form validation with React Hook Form"
+    
+    This iterative approach builds deep understanding!
+  </Accordion>
+  
+  <Accordion title="Copy code from chat">
+    When the AI provides code snippets in chat:
+    1. Click and drag to select the code
+    2. Press Ctrl+C (Windows/Linux) or Cmd+C (Mac)
+    3. Paste into your own editor
+    
+    Note: Code in **walkthroughs** appears in the Monaco editor and can be copied from there.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting Chat
+
+<AccordionGroup>
+  <Accordion title="Input is disabled">
+    If you can't type in the chat input:
+    - Check if a walkthrough is **playing** - pause it first
+    - Make sure the chat panel is visible and focused
+    - Try clicking in the input area
+  </Accordion>
+  
+  <Accordion title="Messages aren't sending">
+    If clicking Send does nothing:
+    - Check the backend connection indicator (⚠ warning means no connection)
+    - Make sure you've typed something (empty messages are blocked)
+    - Check browser console for errors
+  </Accordion>
+  
+  <Accordion title="Responses are slow">
+    **Chat mode** should respond in 2-5 seconds.
+    **Walkthrough mode** takes 10-20 seconds (needs to generate audio).
+    
+    If it's slower:
+    - Backend server may be under load
+    - API rate limits (Cerebras, Gemini) may be affecting speed
+    - Try a simpler prompt
+  </Accordion>
+  
+  <Accordion title="Toggle isn't working">
+    The Walkthrough toggle should always be clickable. If it's not:
+    - Try refreshing the page
+    - Check that you're not in the middle of a generation (wait for "Ready")
+  </Accordion>
+</AccordionGroup>
+
+## Example Chat Workflows
+
+### Workflow 1: Quick Question
+
+1. Toggle **Chat mode** ON
+2. Ask: "What does the spread operator do in JavaScript?"
+3. Read response
+4. Ask follow-up: "Can I use it with objects too?"
+
+### Workflow 2: Learn by Watching
+
+1. Toggle **Walkthrough mode** OFF
+2. Ask: "Show me how to use useEffect for data fetching"
+3. Wait for generation (10-20 sec)
+4. Click Play and watch the demo
+
+### Workflow 3: Deep Dive
+
+1. **Walkthrough:** "Show me Promise basics"
+2. Watch the demo
+3. Switch to **Chat mode**
+4. Ask: "What's the difference between .then() and async/await?"
+5. Read explanation
+6. Switch to **Walkthrough mode**
+7. Ask: "Show me async/await error handling"
+
+<Tip>
+  **Best practice:** Start broad with a walkthrough, then use chat to drill into specifics!
+</Tip>

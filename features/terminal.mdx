@@ -1,0 +1,474 @@
+---
+title: Terminal
+description: Integrated terminal with command execution and output streaming for walkthrough demos
+---
+
+VSpeak includes an integrated terminal powered by xterm.js, enabling walkthroughs to demonstrate real command-line workflows like installing packages, running tests, and starting development servers.
+
+## Overview
+
+The terminal feature provides:
+- **Simulated terminal output**: Display command results during walkthroughs
+- **Real command execution**: Run actual shell commands via the backend
+- **WebSocket support**: Real-time interactive terminal (optional)
+- **Synchronized narration**: Terminal actions sync with audio like other IDE actions
+
+## Terminal Controller
+
+The frontend uses `TerminalController` to manage the xterm.js instance:
+
+```typescript
+// From web/src/terminal/terminalController.ts
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+
+export class TerminalController {
+  private term = new Terminal({
+    cols: 80,
+    rows: 18,
+    convertEol: true,
+    cursorBlink: true,
+    fontFamily: 'Cascadia Code, Consolas, Menlo, monospace',
+    fontSize: 13,
+    theme: {
+      background: '#1b1b1b',
+      foreground: '#d4d4d4',
+      cursor: '#0e639c',
+      selectionBackground: '#264f78',
+    },
+  });
+  private fitAddon = new FitAddon();
+
+  mount(container: HTMLDivElement) {
+    this.term.open(container);
+    this.fitAddon.fit();
+  }
+
+  runCommand(command: string) {
+    this.write(`$ ${command}\r\n`);
+  }
+
+  write(text: string) {
+    this.term.write(text.replace(/\n/g, '\r\n'));
+  }
+
+  clear() {
+    this.term.clear();
+  }
+
+  dispose() {
+    this.term.dispose();
+  }
+}
+```
+
+<Note>
+The terminal automatically converts `\n` to `\r\n` for proper line breaks in terminal emulators.
+</Note>
+
+## Terminal Actions
+
+Walkthroughs can include three types of terminal actions:
+
+### Run Command
+
+Display a command prompt with the command:
+
+```typescript
+{
+  type: "terminal_run",
+  trigger_word: "install",
+  params: {
+    command: "npm install react"
+  }
+}
+```
+
+**Execution**:
+```typescript
+// From web/src/editor/actionExecutor.ts
+case 'terminal_run': {
+  this.terminal?.runCommand(action.command);
+  break;
+}
+```
+
+**Output**:
+```
+$ npm install react
+```
+
+### Show Output
+
+Write output text to the terminal (simulates command results):
+
+```typescript
+{
+  type: "terminal_output",
+  trigger_word: "installed",
+  params: {
+    text: "added 3 packages in 2.5s"
+  }
+}
+```
+
+**Execution**:
+```typescript
+case 'terminal_output': {
+  this.terminal?.write(action.text);
+  break;
+}
+```
+
+### Clear Terminal
+
+Clear the terminal screen:
+
+```typescript
+{
+  type: "clear_terminal",
+  trigger_word: "clear",
+  params: {}
+}
+```
+
+**Execution**:
+```typescript
+case 'clear_terminal': {
+  this.terminal?.clear();
+  break;
+}
+```
+
+## Backend Command Execution
+
+The backend can execute real shell commands:
+
+### REST Endpoint
+
+**Endpoint**: `POST /api/terminal/execute`
+
+**Request**:
+```json
+{
+  "command": "ls -la",
+  "cwd": "src"  // Optional: relative to workspace
+}
+```
+
+**Response**:
+```json
+{
+  "output": "total 16\ndrwxr-xr-x  4 user  staff  128 Jan 1 12:00 .\ndrwxr-xr-x  8 user  staff  256 Jan 1 12:00 ..\n-rw-r--r--  1 user  staff  123 Jan 1 12:00 App.js",
+  "exit_code": 0,
+  "command": "ls -la"
+}
+```
+
+### Implementation
+
+```python
+# From backend/server.py
+@app.post("/api/terminal/execute")
+async def execute_command(cmd: TerminalCommand) -> TerminalResponse:
+    """Execute a terminal command"""
+    cwd = WORKSPACE_ROOT
+    if cmd.cwd:
+        cwd = WORKSPACE_ROOT / cmd.cwd
+    
+    try:
+        result = subprocess.run(
+            cmd.command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=str(cwd),
+            timeout=30  # Prevent hanging
+        )
+        
+        output = result.stdout
+        if result.stderr:
+            output += "\n" + result.stderr
+        
+        return TerminalResponse(
+            output=output.strip(),
+            exit_code=result.returncode,
+            command=cmd.command
+        )
+    except subprocess.TimeoutExpired:
+        return TerminalResponse(
+            output="Command timed out after 30 seconds",
+            exit_code=124,
+            command=cmd.command
+        )
+    except Exception as e:
+        return TerminalResponse(
+            output=str(e),
+            exit_code=1,
+            command=cmd.command
+        )
+```
+
+<Warning>
+Commands run with a 30-second timeout to prevent long-running processes from blocking the server.
+</Warning>
+
+### Data Models
+
+```python
+# From backend/models/types.py
+class TerminalCommand(BaseModel):
+    command: str
+    cwd: Optional[str] = None  # Working directory relative to workspace
+
+class TerminalResponse(BaseModel):
+    output: str
+    exit_code: int
+    command: str
+```
+
+## WebSocket Terminal (Interactive)
+
+For real-time interaction, VSpeak provides a WebSocket endpoint:
+
+### WebSocket Endpoint
+
+**Endpoint**: `ws://localhost:8000/ws/terminal`
+
+**Implementation**:
+```python
+# From backend/server.py
+@app.websocket("/ws/terminal")
+async def websocket_terminal(websocket: WebSocket):
+    await websocket.accept()
+    
+    try:
+        while True:
+            # Receive command from client
+            data = await websocket.receive_text()
+            cmd_data = json.loads(data)
+            
+            # Execute command
+            result = await execute_command(TerminalCommand(**cmd_data))
+            
+            # Send result back
+            await websocket.send_json({
+                "output": result.output,
+                "exit_code": result.exit_code,
+                "command": result.command
+            })
+    except WebSocketDisconnect:
+        pass
+```
+
+### Client Usage
+
+```typescript
+const ws = new WebSocket('ws://localhost:8000/ws/terminal');
+
+ws.onmessage = (event) => {
+  const { output, exit_code, command } = JSON.parse(event.data);
+  terminal.write(output);
+};
+
+// Send command
+ws.send(JSON.stringify({
+  command: 'npm test',
+  cwd: 'src'
+}));
+```
+
+## Terminal Styling
+
+The terminal uses a VSCode-inspired theme:
+
+```typescript
+theme: {
+  background: '#1b1b1b',      // Dark background
+  foreground: '#d4d4d4',      // Light text
+  cursor: '#0e639c',          // Blue cursor
+  selectionBackground: '#264f78',  // Selection highlight
+}
+```
+
+### Custom CSS
+
+```css
+.terminal-container {
+  height: 300px;
+  background: #1b1b1b;
+  border-radius: 4px;
+  padding: 8px;
+  overflow: hidden;
+}
+
+.xterm {
+  height: 100%;
+}
+
+.xterm-viewport {
+  overflow-y: auto;
+}
+```
+
+## Integration with Action Executor
+
+The terminal is attached to the action executor:
+
+```typescript
+// From web/src/editor/actionExecutor.ts
+class ActionExecutor {
+  private terminal: TerminalController | null = null;
+
+  attachTerminal(terminal: TerminalController | null) {
+    this.terminal = terminal;
+  }
+
+  execute(action: TimelineAction) {
+    switch (action.kind) {
+      case 'terminal_run':
+        this.terminal?.runCommand(action.command);
+        break;
+      case 'terminal_output':
+        this.terminal?.write(action.text);
+        break;
+      case 'clear_terminal':
+        this.terminal?.clear();
+        break;
+      // ...
+    }
+  }
+
+  reset() {
+    this.terminal?.clear();
+    // ...
+  }
+}
+```
+
+## Common Workflow Patterns
+
+### Install Dependencies
+
+```json
+[
+  {
+    "type": "terminal_run",
+    "trigger_word": "install",
+    "params": { "command": "npm install" }
+  },
+  {
+    "type": "terminal_output",
+    "trigger_word": "packages",
+    "params": { "text": "added 142 packages in 8s" }
+  }
+]
+```
+
+### Run Tests
+
+```json
+[
+  {
+    "type": "terminal_run",
+    "trigger_word": "test",
+    "params": { "command": "npm test" }
+  },
+  {
+    "type": "terminal_output",
+    "trigger_word": "passed",
+    "params": { "text": "PASS  src/App.test.js\n✓ renders without crashing (23ms)\n\nTest Suites: 1 passed, 1 total\nTests:       1 passed, 1 total" }
+  }
+]
+```
+
+### Start Dev Server
+
+```json
+[
+  {
+    "type": "terminal_run",
+    "trigger_word": "start",
+    "params": { "command": "npm start" }
+  },
+  {
+    "type": "terminal_output",
+    "trigger_word": "server",
+    "params": { "text": "Compiled successfully!\n\nYou can now view app in the browser.\n\n  Local:            http://localhost:3000" }
+  }
+]
+```
+
+### Clear Before New Section
+
+```json
+[
+  {
+    "type": "clear_terminal",
+    "trigger_word": "clean",
+    "params": {}
+  },
+  {
+    "type": "terminal_run",
+    "trigger_word": "run",
+    "params": { "command": "python script.py" }
+  }
+]
+```
+
+## Security Considerations
+
+### Command Restrictions
+
+<Warning>
+In production, consider:
+- Whitelisting allowed commands
+- Sanitizing user input
+- Running in sandboxed environments
+- Limiting resource usage
+</Warning>
+
+### Workspace Isolation
+
+Commands are scoped to the workspace directory:
+
+```python
+cwd = WORKSPACE_ROOT
+if cmd.cwd:
+    cwd = WORKSPACE_ROOT / cmd.cwd  # Still under WORKSPACE_ROOT
+```
+
+## Best Practices
+
+1. **Simulate output**: Use `terminal_output` for predictable demo results
+2. **Clear strategically**: Use `clear_terminal` between major sections
+3. **Time actions**: Ensure output appears after the command completes
+4. **Format output**: Use proper newlines (`\n`) for readability
+
+## Usage Example
+
+```typescript
+import { TerminalController } from './terminal/terminalController';
+
+const terminal = new TerminalController();
+const container = document.getElementById('terminal')!;
+terminal.mount(container);
+
+// Simulate a workflow
+terminal.runCommand('git status');
+terminal.write('On branch main\nYour branch is up to date.\n');
+terminal.write('\n');
+terminal.runCommand('npm run build');
+terminal.write('> build\n> webpack --mode production\n\nCompiled successfully!\n');
+```
+
+## Related Features
+
+<CardGroup cols={2}>
+  <Card title="IDE Actions" icon="code" href="/features/ide-actions">
+    Code editing actions
+  </Card>
+  <Card title="File System" icon="folder" href="/features/file-system">
+    File operations API
+  </Card>
+</CardGroup>

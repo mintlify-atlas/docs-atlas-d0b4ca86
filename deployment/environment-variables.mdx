@@ -1,0 +1,406 @@
+---
+title: Environment Variables
+description: Complete reference for all VSpeak environment variables
+---
+
+VSpeak requires several environment variables to connect to AI services and configure the application. This guide covers all available configuration options.
+
+## Backend Environment Variables
+
+Create a `.env` file in the `backend/` directory:
+
+### Required Variables
+
+<ParamField path="CEREBRAS_API_KEY" type="string" required>
+  API key for Cerebras Cloud SDK. Used for AI chat and script generation.
+  
+  **Get your key:** [https://cerebras.ai](https://cerebras.ai)
+  
+  ```bash
+  CEREBRAS_API_KEY=csk-xxxxxxxxxxxxxxxxxxxxx
+  ```
+</ParamField>
+
+<ParamField path="GROQ_API_KEY" type="string" required>
+  API key for Groq. Used for TTS (Orpheus) and STT (Whisper).
+  
+  **Get your key:** [https://console.groq.com](https://console.groq.com)
+  
+  ```bash
+  GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxx
+  ```
+</ParamField>
+
+<ParamField path="GEMINI_API_KEY" type="string" required>
+  API key for Google Gemini. Used for alternative TTS provider.
+  
+  **Get your key:** [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
+  
+  ```bash
+  GEMINI_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxx
+  ```
+</ParamField>
+
+### Optional Variables
+
+<ParamField path="WORKSPACE_ROOT" type="string" default="./workspace">
+  Path to the workspace directory where user files are stored.
+  
+  ```bash
+  WORKSPACE_ROOT=/var/lib/vspeak/workspace
+  ```
+  
+  <Note>
+  This directory must be writable by the application. It will be created if it doesn't exist.
+  </Note>
+</ParamField>
+
+<ParamField path="TTS_PROVIDER" type="string" default="gemini">
+  Choose the TTS provider: `"orpheus"` (Groq) or `"gemini"` (Google).
+  
+  ```bash
+  TTS_PROVIDER=gemini
+  ```
+  
+  **Options:**
+  - `gemini` - Google Gemini TTS (recommended, more natural voices)
+  - `orpheus` - Groq Orpheus TTS (faster, supports vocal directions)
+</ParamField>
+
+<ParamField path="OUTPUT_DIR" type="string" default="output">
+  Directory for pipeline output files (audio, scripts, etc.).
+  
+  ```bash
+  OUTPUT_DIR=/var/lib/vspeak/output
+  ```
+</ParamField>
+
+## AI Model Configuration
+
+These are configured in `backend/config.py` but can be overridden via environment variables:
+
+<ParamField path="CEREBRAS_MODEL" type="string" default="zai-glm-4.7">
+  Cerebras model to use for AI generation.
+  
+  ```bash
+  CEREBRAS_MODEL=zai-glm-4.7
+  ```
+</ParamField>
+
+<ParamField path="CEREBRAS_BASE_URL" type="string" default="https://api.cerebras.ai/v1">
+  Cerebras API base URL.
+  
+  ```bash
+  CEREBRAS_BASE_URL=https://api.cerebras.ai/v1
+  ```
+</ParamField>
+
+<ParamField path="ORPHEUS_TTS_MODEL" type="string" default="canopylabs/orpheus-v1-english">
+  Groq TTS model name.
+  
+  ```bash
+  ORPHEUS_TTS_MODEL=canopylabs/orpheus-v1-english
+  ```
+</ParamField>
+
+<ParamField path="ORPHEUS_TTS_VOICE" type="string" default="austin">
+  Orpheus voice to use for TTS.
+  
+  ```bash
+  ORPHEUS_TTS_VOICE=austin
+  ```
+</ParamField>
+
+<ParamField path="GEMINI_TTS_MODEL" type="string" default="gemini-2.5-flash-preview-tts">
+  Gemini TTS model name.
+  
+  ```bash
+  GEMINI_TTS_MODEL=gemini-2.5-flash-preview-tts
+  ```
+</ParamField>
+
+<ParamField path="GEMINI_TTS_VOICE" type="string" default="Kore">
+  Gemini voice to use for TTS.
+  
+  **Available voices:** Zephyr, Puck, Charon, Kore, Fenrir, Aoede
+  
+  ```bash
+  GEMINI_TTS_VOICE=Kore
+  ```
+</ParamField>
+
+<ParamField path="STT_MODEL" type="string" default="whisper-large-v3-turbo">
+  Groq STT (Speech-to-Text) model for transcription.
+  
+  ```bash
+  STT_MODEL=whisper-large-v3-turbo
+  ```
+</ParamField>
+
+## Script Generation Settings
+
+<ParamField path="MIN_CHUNK_LENGTH" type="integer" default={100}>
+  Minimum characters per script chunk.
+  
+  ```bash
+  MIN_CHUNK_LENGTH=100
+  ```
+</ParamField>
+
+<ParamField path="MAX_CHUNK_LENGTH" type="integer" default={150}>
+  Maximum characters per script chunk.
+  
+  ```bash
+  MAX_CHUNK_LENGTH=150
+  ```
+</ParamField>
+
+<ParamField path="TARGET_SCRIPT_DURATION_SECONDS" type="integer" default={120}>
+  Target duration for generated scripts in seconds (approximately 2 minutes).
+  
+  ```bash
+  TARGET_SCRIPT_DURATION_SECONDS=120
+  ```
+</ParamField>
+
+## Audio Processing Settings
+
+<ParamField path="CROSSFADE_DURATION_MS" type="integer" default={50}>
+  Crossfade duration between audio chunks in milliseconds.
+  
+  ```bash
+  CROSSFADE_DURATION_MS=50
+  ```
+</ParamField>
+
+<ParamField path="SILENCE_PADDING_MS" type="integer" default={150}>
+  Silence padding at sentence ends in milliseconds.
+  
+  ```bash
+  SILENCE_PADDING_MS=150
+  ```
+</ParamField>
+
+<ParamField path="SAMPLE_RATE" type="integer" default={24000}>
+  Audio sample rate in Hz. Orpheus outputs 24kHz by default.
+  
+  ```bash
+  SAMPLE_RATE=24000
+  ```
+</ParamField>
+
+## Frontend Environment Variables
+
+Create a `.env` or `.env.production` file in the `web/` directory:
+
+<ParamField path="VITE_API_URL" type="string" default="http://localhost:8000">
+  Backend API URL for production builds.
+  
+  ```bash
+  VITE_API_URL=https://api.vspeak.example.com
+  ```
+  
+  <Warning>
+  This must be set for production deployments. The development proxy only works with `npm run dev`.
+  </Warning>
+</ParamField>
+
+<ParamField path="VITE_WS_URL" type="string" optional>
+  WebSocket URL for terminal connections (optional, defaults to API URL with ws/wss protocol).
+  
+  ```bash
+  VITE_WS_URL=wss://api.vspeak.example.com
+  ```
+</ParamField>
+
+<ParamField path="VITE_GA_ID" type="string" optional>
+  Google Analytics measurement ID for tracking (optional).
+  
+  ```bash
+  VITE_GA_ID=G-XXXXXXXXXX
+  ```
+</ParamField>
+
+<ParamField path="VITE_SENTRY_DSN" type="string" optional>
+  Sentry DSN for error tracking (optional).
+  
+  ```bash
+  VITE_SENTRY_DSN=https://xxxxx@sentry.io/xxxxx
+  ```
+</ParamField>
+
+## Example Configuration Files
+
+<CodeGroup>
+```bash backend/.env
+# API Keys (Required)
+CEREBRAS_API_KEY=csk-xxxxxxxxxxxxxxxxxxxxx
+GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxx
+GEMINI_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Paths
+WORKSPACE_ROOT=/var/lib/vspeak/workspace
+OUTPUT_DIR=/var/lib/vspeak/output
+
+# TTS Configuration
+TTS_PROVIDER=gemini
+GEMINI_TTS_VOICE=Kore
+ORPHEUS_TTS_VOICE=austin
+
+# Script Settings
+TARGET_SCRIPT_DURATION_SECONDS=120
+MIN_CHUNK_LENGTH=100
+MAX_CHUNK_LENGTH=150
+
+# Audio Settings
+CROSSFADE_DURATION_MS=50
+SILENCE_PADDING_MS=150
+SAMPLE_RATE=24000
+```
+
+```bash web/.env.production
+# Backend API URL
+VITE_API_URL=https://api.vspeak.example.com
+
+# Optional: Analytics
+VITE_GA_ID=G-XXXXXXXXXX
+
+# Optional: Error Tracking
+VITE_SENTRY_DSN=https://xxxxx@sentry.io/xxxxx
+```
+
+```bash .env.development
+# Development configuration
+CEREBRAS_API_KEY=csk-xxxxxxxxxxxxxxxxxxxxx
+GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxx
+GEMINI_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+WORKSPACE_ROOT=./workspace
+OUTPUT_DIR=./output
+TTS_PROVIDER=gemini
+```
+
+```bash docker-compose.env
+# Environment file for Docker Compose
+CEREBRAS_API_KEY=csk-xxxxxxxxxxxxxxxxxxxxx
+GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxx
+GEMINI_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+WORKSPACE_ROOT=/app/workspace
+OUTPUT_DIR=/app/output
+TTS_PROVIDER=gemini
+GEMINI_TTS_VOICE=Kore
+```
+</CodeGroup>
+
+## Security Best Practices
+
+<Warning>
+  **Never commit `.env` files to version control!**
+  
+  Add to `.gitignore`:
+  ```bash
+  .env
+  .env.local
+  .env.production
+  .env.*.local
+  ```
+</Warning>
+
+<Steps>
+  <Step title="Use .env.example">
+    Create a `.env.example` file with placeholder values:
+    
+    ```bash backend/.env.example
+    CEREBRAS_API_KEY=your_cerebras_api_key_here
+    GROQ_API_KEY=your_groq_api_key_here
+    GEMINI_API_KEY=your_gemini_api_key_here
+    WORKSPACE_ROOT=/path/to/workspace
+    TTS_PROVIDER=gemini
+    ```
+  </Step>
+
+  <Step title="Rotate API Keys Regularly">
+    - Change API keys every 90 days
+    - Immediately rotate if compromised
+    - Use different keys for dev/staging/production
+  </Step>
+
+  <Step title="Use Secret Management">
+    For production, use secret management services:
+    - AWS Secrets Manager
+    - Google Cloud Secret Manager
+    - Azure Key Vault
+    - HashiCorp Vault
+  </Step>
+
+  <Step title="Set Proper File Permissions">
+    ```bash
+    chmod 600 .env
+    chown vspeak-user:vspeak-group .env
+    ```
+  </Step>
+</Steps>
+
+## Validation
+
+VSpeak validates environment variables on startup:
+
+```python
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+# Check required variables
+required_vars = [
+    "CEREBRAS_API_KEY",
+    "GROQ_API_KEY",
+    "GEMINI_API_KEY"
+]
+
+for var in required_vars:
+    if not os.getenv(var):
+        raise ValueError(f"Missing required environment variable: {var}")
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Environment variables not loading">
+    - Ensure `.env` file is in the correct directory
+    - Check file permissions (should be readable)
+    - Verify `python-dotenv` is installed
+    - Check for syntax errors in `.env` file (no spaces around `=`)
+  </Accordion>
+
+  <Accordion title="API key errors">
+    - Verify keys are valid and active
+    - Check for extra whitespace or quotes
+    - Ensure keys haven't expired
+    - Verify API provider service is accessible
+  </Accordion>
+
+  <Accordion title="Path variables not working">
+    - Use absolute paths, not relative
+    - Ensure directories exist and are writable
+    - Check user permissions
+    - Verify no typos in path names
+  </Accordion>
+
+  <Accordion title="Vite environment variables not available">
+    - Prefix with `VITE_` for Vite to expose them
+    - Rebuild after changing `.env` files
+    - Use `import.meta.env.VITE_VARNAME` not `process.env`
+    - Check environment file matches build mode (.env.production for prod)
+  </Accordion>
+</AccordionGroup>
+
+## Reference
+
+All configuration is centralized in:
+- Backend: `backend/config.py` (source: backend/config.py:1-75)
+- Frontend: `web/vite.config.ts` (source: web/vite.config.ts:1-17)
+- Server: `backend/server.py` (source: backend/server.py:54-56)
+
+For the complete list of constants and defaults, refer to these files in the source code.

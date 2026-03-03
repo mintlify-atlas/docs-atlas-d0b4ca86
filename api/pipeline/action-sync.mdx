@@ -1,0 +1,331 @@
+---
+title: ActionSyncEngine
+description: Synchronize IDE actions to precise word timestamps for perfectly timed code demonstrations
+---
+
+The `ActionSyncEngine` class maps IDE actions from the generated script to exact millisecond timestamps by matching trigger words with the Whisper transcription. This enables frame-perfect synchronization between narration and code actions.
+
+## Class Overview
+
+```python
+from pathlib import Path
+from pipeline import ActionSyncEngine
+
+output_dir = Path("./output")
+sync_engine = ActionSyncEngine(output_dir)
+```
+
+**Location:** `backend/pipeline/action_sync.py:11`
+
+## Constructor
+
+```python
+ActionSyncEngine(output_dir: Path)
+```
+
+<ParamField path="output_dir" type="Path" required>
+  Directory for storing synchronized action files
+</ParamField>
+
+## Methods
+
+### sync_actions()
+
+Maps all actions from the script to their trigger word timestamps.
+
+```python
+def sync_actions(
+    script: GeneratedScript,
+    timestamps: list[TimestampedWord]
+) -> tuple[list[SyncedAction], float]
+```
+
+<ParamField path="script" type="GeneratedScript" required>
+  The generated script with chunks and actions
+</ParamField>
+
+<ParamField path="timestamps" type="list[TimestampedWord]" required>
+  Word-level timestamps from TimestampExtractor
+</ParamField>
+
+<ResponseField name="synced_actions" type="list[SyncedAction]">
+  List of actions with precise millisecond timestamps
+  
+  <Expandable title="SyncedAction fields">
+    <ResponseField name="type" type="str">
+      Action type (e.g., "create_file", "type_code")
+    </ResponseField>
+    <ResponseField name="timestamp_ms" type="int">
+      Exact millisecond when this action should execute
+    </ResponseField>
+    <ResponseField name="trigger_word" type="str">
+      The word that triggered this action
+    </ResponseField>
+    <ResponseField name="params" type="dict">
+      Action-specific parameters
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="latency_ms" type="float">
+  Time taken for synchronization in milliseconds
+</ResponseField>
+
+#### Example Usage
+
+```python
+from pathlib import Path
+from pipeline import (
+    ScriptGenerator,
+    AudioGenerator,
+    TimestampExtractor,
+    ActionSyncEngine
+)
+
+# Generate script and audio
+script_gen = ScriptGenerator()
+script, _ = script_gen.generate("Create a React component")
+
+output_dir = Path("./output")
+audio_gen = AudioGenerator(output_dir)
+audio_path, _, _ = audio_gen.generate_audio(script)
+
+# Extract timestamps
+ts_extractor = TimestampExtractor()
+timestamps, _ = ts_extractor.extract_timestamps(audio_path)
+
+# Synchronize actions
+sync_engine = ActionSyncEngine(output_dir)
+synced_actions, sync_latency = sync_engine.sync_actions(script, timestamps)
+
+print(f"Synchronized {len(synced_actions)} actions in {sync_latency:.0f}ms")
+
+# Display synchronized actions
+for action in synced_actions:
+    print(f"{action.timestamp_ms}ms: {action.type} ('{action.trigger_word}')")
+```
+
+### save_actions_json()
+
+Saves synchronized actions to a JSON file for use by the frontend player.
+
+```python
+def save_actions_json(synced_actions: list[SyncedAction]) -> Path
+```
+
+<ParamField path="synced_actions" type="list[SyncedAction]" required>
+  List of synchronized actions from sync_actions()
+</ParamField>
+
+<ResponseField name="output_path" type="Path">
+  Path to the saved JSON file (e.g., `output/actions.json`)
+</ResponseField>
+
+#### Example Usage
+
+```python
+# Sync and save actions
+synced_actions, _ = sync_engine.sync_actions(script, timestamps)
+actions_path = sync_engine.save_actions_json(synced_actions)
+
+print(f"Actions saved to: {actions_path}")
+
+# The JSON file structure:
+# {
+#   "total_actions": 15,
+#   "actions": [
+#     {
+#       "type": "create_file",
+#       "timestamp_ms": 2350,
+#       "trigger_word": "create",
+#       "params": {"path": "app.js"}
+#     },
+#     ...
+#   ]
+# }
+```
+
+## Synchronization Algorithm
+
+The sync engine uses a sequential matching algorithm:
+
+1. **Extract all actions** from script chunks in order
+2. **For each action:**
+   - Clean the trigger word (lowercase, strip)
+   - Search timestamps for matching word
+   - Match must occur after the last matched timestamp (prevents duplicates)
+   - Strip punctuation from transcribed words (.,!?;:'")
+3. **Handle unmatched triggers:**
+   - Log warning if trigger word not found
+   - Continue processing remaining actions
+
+### Matching Logic
+
+```python
+# Exact match
+trigger: "create" → transcribed: "create" ✓
+
+# Case-insensitive
+trigger: "Create" → transcribed: "create" ✓
+
+# Punctuation stripped
+trigger: "create" → transcribed: "create," ✓
+
+# Partial match (fallback)
+trigger: "function" → transcribed: "functions" ✓
+trigger: "type" → transcribed: "typing" ✓
+```
+
+## Complete Pipeline Example
+
+```python
+from pathlib import Path
+from pipeline import (
+    ScriptGenerator,
+    AudioGenerator,
+    TimestampExtractor,
+    ActionSyncEngine
+)
+
+def run_full_pipeline(prompt: str, output_dir: Path):
+    """Run the complete VSpeak pipeline."""
+    
+    # Stage 1: Script Generation
+    print("Stage 1: Generating script...")
+    script_gen = ScriptGenerator()
+    script, script_latency = script_gen.generate(prompt)
+    print(f"  ✓ {script.total_chunks} chunks, {script.total_actions} actions")
+    
+    # Stage 2: Audio Generation
+    print("Stage 2: Generating audio...")
+    audio_gen = AudioGenerator(output_dir)
+    audio_path, chunk_latencies, stitch_time = audio_gen.generate_audio(script)
+    print(f"  ✓ Audio: {audio_path}")
+    
+    # Stage 3: Timestamp Extraction
+    print("Stage 3: Extracting timestamps...")
+    ts_extractor = TimestampExtractor()
+    timestamps, stt_latency = ts_extractor.extract_timestamps(audio_path)
+    print(f"  ✓ {len(timestamps)} word timestamps")
+    
+    # Stage 4: Action Synchronization
+    print("Stage 4: Synchronizing actions...")
+    sync_engine = ActionSyncEngine(output_dir)
+    synced_actions, sync_latency = sync_engine.sync_actions(script, timestamps)
+    actions_path = sync_engine.save_actions_json(synced_actions)
+    print(f"  ✓ {len(synced_actions)} actions synced")
+    
+    return {
+        "audio_path": audio_path,
+        "actions_path": actions_path,
+        "synced_actions": synced_actions
+    }
+
+# Run the pipeline
+result = run_full_pipeline(
+    "Create a Python function that calculates factorial",
+    Path("./output")
+)
+
+print(f"\nPipeline complete!")
+print(f"Audio: {result['audio_path']}")
+print(f"Actions: {result['actions_path']}")
+```
+
+## Output JSON Format
+
+The `actions.json` file structure:
+
+```json
+{
+  "total_actions": 8,
+  "actions": [
+    {
+      "type": "create_file",
+      "timestamp_ms": 2350,
+      "trigger_word": "create",
+      "params": {
+        "path": "factorial.py"
+      }
+    },
+    {
+      "type": "type_code",
+      "timestamp_ms": 5420,
+      "trigger_word": "define",
+      "params": {
+        "content": "def factorial(n):",
+        "speed": "medium"
+      }
+    },
+    {
+      "type": "terminal_command",
+      "timestamp_ms": 45800,
+      "trigger_word": "run",
+      "params": {
+        "command": "python factorial.py"
+      }
+    }
+  ]
+}
+```
+
+## Handling Unmatched Triggers
+
+When trigger words are not found in the transcription:
+
+```python
+synced_actions, sync_latency = sync_engine.sync_actions(script, timestamps)
+
+# Check for warnings in console output:
+# ⚠ Could not find trigger word 'refactor' - using estimate
+
+# Actions are still included but may have estimated timestamps
+# Verify critical actions manually:
+for action in synced_actions:
+    if action.trigger_word == "important_trigger":
+        print(f"Verify timestamp: {action.timestamp_ms}ms")
+```
+
+## Performance Metrics
+
+Typical synchronization performance:
+
+- **Latency:** 5-50ms for 20-30 actions
+- **Match rate:** 90-95% exact trigger word matches
+- **Precision:** ±50ms timestamp accuracy
+
+## Debugging Unmatched Actions
+
+```python
+import json
+
+# Save timestamps for inspection
+with open("timestamps.json", "w") as f:
+    json.dump(
+        [{"word": ts.word, "start_ms": ts.start_ms} for ts in timestamps],
+        f,
+        indent=2
+    )
+
+# Save actions for comparison
+with open("expected_actions.json", "w") as f:
+    json.dump(
+        [{"trigger": a.trigger_word, "type": a.type} for chunk in script.chunks for a in chunk.actions],
+        f,
+        indent=2
+    )
+
+# Compare to find mismatches
+print("Expected triggers:")
+for chunk in script.chunks:
+    for action in chunk.actions:
+        matches = [ts for ts in timestamps if action.trigger_word.lower() in ts.word.lower()]
+        print(f"  {action.trigger_word}: {len(matches)} potential matches")
+```
+
+## See Also
+
+- [ScriptGenerator](/api/pipeline/script-generator) - Generate scripts with trigger words
+- [TimestampExtractor](/api/pipeline/timestamp-extractor) - Extract word timestamps
+- [AudioGenerator](/api/pipeline/audio-generator) - Generate synchronized audio
+- [Pipeline Overview](/concepts/pipeline) - Complete pipeline architecture

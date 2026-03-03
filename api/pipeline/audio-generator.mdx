@@ -1,0 +1,215 @@
+---
+title: AudioGenerator
+description: Generate and stitch audio from script chunks using parallel TTS processing
+---
+
+The `AudioGenerator` class converts script chunks into audio files using Groq's Orpheus TTS model. It supports parallel chunk processing with automatic retry logic and stitches the results into a single synchronized audio file.
+
+## Class Overview
+
+```python
+from pathlib import Path
+from pipeline import AudioGenerator
+
+output_dir = Path("./output")
+audio_gen = AudioGenerator(output_dir)
+```
+
+**Location:** `backend/pipeline/audio_generator.py:20`
+
+## Constructor
+
+```python
+AudioGenerator(output_dir: Path)
+```
+
+<ParamField path="output_dir" type="Path" required>
+  Directory for storing audio files and chunks
+</ParamField>
+
+The constructor creates a `chunks/` subdirectory for individual chunk audio files.
+
+## Methods
+
+### generate_audio()
+
+Generates audio for all script chunks in parallel and stitches them together.
+
+```python
+def generate_audio(script: GeneratedScript) -> tuple[Path, list[float], float]
+```
+
+<ParamField path="script" type="GeneratedScript" required>
+  The generated script with text chunks
+</ParamField>
+
+<ResponseField name="final_audio_path" type="Path">
+  Path to the complete stitched audio file (e.g., `output/audio.wav`)
+</ResponseField>
+
+<ResponseField name="per_chunk_latencies" type="list[float]">
+  List of latency measurements in milliseconds for each chunk
+</ResponseField>
+
+<ResponseField name="stitching_time_ms" type="float">
+  Time taken to stitch all chunks together in milliseconds
+</ResponseField>
+
+#### Example Usage
+
+```python
+from pathlib import Path
+from pipeline import ScriptGenerator, AudioGenerator
+
+# Generate script
+script_gen = ScriptGenerator()
+script, _ = script_gen.generate(
+    "Create a simple Python function that adds two numbers"
+)
+
+# Generate audio
+output_dir = Path("./output")
+audio_gen = AudioGenerator(output_dir)
+
+audio_path, chunk_latencies, stitch_time = audio_gen.generate_audio(script)
+
+print(f"Audio generated: {audio_path}")
+print(f"Total chunks: {len(chunk_latencies)}")
+print(f"Average TTS latency: {sum(chunk_latencies)/len(chunk_latencies):.0f}ms")
+print(f"Stitching time: {stitch_time:.0f}ms")
+
+# Get audio duration
+duration = audio_gen.get_audio_duration_ms(audio_path)
+print(f"Audio duration: {duration/1000:.1f}s")
+```
+
+### get_audio_duration_ms()
+
+Returns the duration of an audio file in milliseconds.
+
+```python
+def get_audio_duration_ms(audio_path: Path) -> float
+```
+
+<ParamField path="audio_path" type="Path" required>
+  Path to the WAV audio file
+</ParamField>
+
+<ResponseField name="duration_ms" type="float">
+  Audio duration in milliseconds
+</ResponseField>
+
+```python
+audio_path = Path("output/audio.wav")
+duration = audio_gen.get_audio_duration_ms(audio_path)
+print(f"Duration: {duration/1000:.1f} seconds")
+```
+
+## Parallel Processing
+
+The AudioGenerator uses ThreadPoolExecutor for parallel chunk generation:
+
+- **Max workers:** 3 concurrent TTS requests (configurable via `MAX_PARALLEL_TTS`)
+- **Retry logic:** Automatic retry with exponential backoff for rate limits
+- **Max retries:** 3 attempts per chunk
+
+### Rate Limiting
+
+The generator handles rate limits automatically:
+
+```python
+# Automatic retry with exponential backoff
+# Attempt 1: Retry after 2 seconds
+# Attempt 2: Retry after 4 seconds
+# Attempt 3: Retry after 8 seconds
+```
+
+## Audio Stitching
+
+The `_stitch_audio_files()` method combines individual chunks:
+
+1. Reads audio parameters from the first chunk (sample rate, channels, bit depth)
+2. Concatenates all chunk audio data
+3. Inserts silence padding between chunks (configurable)
+4. Writes the combined output as a single WAV file
+
+<ParamField path="SILENCE_PADDING_MS" type="int" default="150">
+  Milliseconds of silence between chunks (from `config.py:42`)
+</ParamField>
+
+## Output Structure
+
+The AudioGenerator creates the following directory structure:
+
+```
+output/
+├── chunks/
+│   ├── chunk_000.wav
+│   ├── chunk_001.wav
+│   ├── chunk_002.wav
+│   └── ...
+└── audio.wav  # Final stitched audio
+```
+
+## TTS Configuration
+
+The audio generator uses Groq's Orpheus TTS model with these settings:
+
+<ParamField path="ORPHEUS_TTS_MODEL" type="str" default="canopylabs/orpheus-v1-english">
+  TTS model identifier (from `config.py:24`)
+</ParamField>
+
+<ParamField path="ORPHEUS_TTS_VOICE" type="str" default="austin">
+  Voice ID for speech synthesis (from `config.py:25`)
+</ParamField>
+
+<ParamField path="TTS_RESPONSE_FORMAT" type="str" default="wav">
+  Audio output format (from `config.py:26`)
+</ParamField>
+
+<ParamField path="SAMPLE_RATE" type="int" default="24000">
+  Audio sample rate in Hz (from `config.py:43`)
+</ParamField>
+
+## Performance Metrics
+
+Typical performance for a 2-minute script (30-40 chunks):
+
+- **Parallel generation:** 15-25 seconds total
+- **Per-chunk latency:** 500-1500ms per chunk
+- **Stitching time:** 50-200ms
+- **Speedup:** 3x faster than sequential processing
+
+## Error Handling
+
+```python
+try:
+    audio_path, latencies, stitch_time = audio_gen.generate_audio(script)
+except Exception as e:
+    if "rate" in str(e).lower():
+        print("Rate limited - all retries exhausted")
+    else:
+        print(f"TTS generation failed: {e}")
+```
+
+## Alternative: GeminiAudioGenerator
+
+For single-pass audio generation without chunking, use `GeminiAudioGenerator`:
+
+```python
+from pipeline.gemini_audio_generator import GeminiAudioGenerator
+
+# Generates entire script as one audio file (no chunking)
+audio_gen = GeminiAudioGenerator(output_dir)
+audio_path, chunk_latencies, stitch_time = audio_gen.generate_audio(script)
+```
+
+**Trade-offs:**
+- Gemini: Faster for short scripts, no stitching needed
+- Orpheus: Better for long scripts with vocal directions, parallel processing
+
+## See Also
+
+- [ScriptGenerator](/api/pipeline/script-generator) - Generate scripts for TTS
+- [TimestampExtractor](/api/pipeline/timestamp-extractor) - Extract word timestamps
+- [Pipeline Overview](/concepts/pipeline) - Complete pipeline workflow

@@ -1,0 +1,197 @@
+---
+title: Creating Walkthroughs
+description: Learn how to generate audio-narrated coding walkthroughs that demonstrate concepts step-by-step
+---
+
+# Creating Walkthroughs
+
+Walkthroughs are VSpeak's signature feature - audio-narrated coding demonstrations that show you exactly how to build something, with code appearing in sync with the AI's voice explanation.
+
+## Quick Start
+
+The easiest way to create a walkthrough is to simply ask for a demonstration:
+
+<Steps>
+  <Step title="Open the chat panel">
+    The chat panel is on the right side of the IDE. If it's hidden, click the chat icon in the activity bar.
+  </Step>
+  
+  <Step title="Make sure Walkthrough mode is ON">
+    Look for the **Walkthrough** toggle in the chat header. When it's ON, the toggle shows a green indicator.
+  </Step>
+  
+  <Step title="Ask for a demonstration">
+    Type a prompt that starts with phrases like:
+    - "Show me how to..."
+    - "Walk me through..."
+    - "Demonstrate..."
+    - "Teach me..."
+    
+    For example:
+    ```
+    Show me how to create a React counter component
+    ```
+  </Step>
+  
+  <Step title="Wait for generation">
+    VSpeak will generate your walkthrough in several stages:
+    - **Thinking** - Planning the demonstration
+    - **Generating script** - Writing the narration and actions
+    - **Creating audio** - Converting script to speech
+    - **Syncing actions** - Matching code actions to audio timestamps
+    
+    This typically takes 10-20 seconds.
+  </Step>
+  
+  <Step title="Click play to start">
+    Once ready, you'll see "Walkthrough ready" in the chat. Click the play button in the Walkthrough Player to begin!
+  </Step>
+</Steps>
+
+## Walkthrough vs. Chat Mode
+
+VSpeak has two operating modes:
+
+| Mode | When to Use | What You Get |
+|------|-------------|-------------|
+| **Walkthrough Mode** | Learning new concepts, seeing how something is built | Audio-narrated demo with code appearing in sync |
+| **Chat Mode** | Quick questions, text explanations | Standard text responses (no audio) |
+
+<Tip>
+  Walkthrough mode is best for **learning by watching**. Chat mode is faster for quick answers.
+</Tip>
+
+To toggle between modes, click the **Walkthrough** button in the chat header.
+
+## What Makes a Good Walkthrough Prompt?
+
+### ✅ Great Prompts
+
+Specific, action-oriented requests work best:
+
+- "Show me how to build a todo list with React hooks"
+- "Walk me through creating a REST API with Express"
+- "Demonstrate how to add authentication to a Next.js app"
+- "Teach me how to use useState and useEffect together"
+
+### ❌ Avoid These
+
+Vague or overly broad requests may produce generic walkthroughs:
+
+- "Tell me about React" (too broad - use Chat mode instead)
+- "JavaScript" (not specific enough)
+- "Fix my code" (VSpeak works best with new demonstrations)
+
+<Note>
+  The AI will generate a **~2 minute** walkthrough by default. For complex topics, break them into smaller, focused requests.
+</Note>
+
+## What Happens During Generation?
+
+When you request a walkthrough, VSpeak:
+
+1. **Generates a script** - The AI writes a narration script broken into logical chunks, with IDE actions (create file, type code, run command) attached to each part
+
+2. **Creates chapters** - The script is divided into chapters like "Introduction", "Setting Up", "Adding State", etc.
+
+3. **Converts to audio** - The script is sent to a text-to-speech service (Gemini TTS) to create natural-sounding narration
+
+4. **Syncs timestamps** - The audio is transcribed with word-level timestamps, so each action knows exactly when to execute
+
+5. **Builds the timeline** - Everything is packaged into a playable walkthrough with a seekable timeline
+
+## Tips for Best Results
+
+<AccordionGroup>
+  <Accordion title="Start with beginner-friendly topics">
+    VSpeak excels at teaching fundamentals. Try:
+    - "Show me how to create a basic HTML page"
+    - "Walk me through writing my first Python function"
+    - "Demonstrate CSS flexbox layout"
+  </Accordion>
+  
+  <Accordion title="Focus on one concept at a time">
+    Instead of "Build a full e-commerce site", try:
+    - "Show me how to create a product card component"
+    - "Walk me through adding items to a shopping cart"
+    - "Demonstrate form validation for checkout"
+  </Accordion>
+  
+  <Accordion title="Use framework/library names">
+    Be specific about your stack:
+    - "Show me how to fetch data with React hooks" (not just "fetch data")
+    - "Walk me through Express middleware" (not just "middleware")
+    - "Demonstrate Tailwind CSS grid layout" (not just "grid")
+  </Accordion>
+  
+  <Accordion title="Ask for common patterns">
+    VSpeak knows popular coding patterns:
+    - "Show me the useReducer pattern"
+    - "Walk me through the observer pattern in JavaScript"
+    - "Demonstrate async/await error handling"
+  </Accordion>
+</AccordionGroup>
+
+## After Generation
+
+Once your walkthrough is ready:
+
+- The **Walkthrough Player** appears at the top of the right panel
+- You'll see a visual timeline with chapter markers
+- The editor and file explorer are reset and ready for the demo
+- Click **Play** to start watching!
+
+See [Navigating Chapters](/guides/navigating-chapters) to learn how to control playback and jump between sections.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Generation is taking a long time">
+    Walkthrough generation typically takes 10-20 seconds. If it's been over 30 seconds:
+    - Check that the backend server is running (look for the connection warning icon in the chat header)
+    - Try a simpler prompt
+    - Refresh the page and try again
+  </Accordion>
+  
+  <Accordion title="I got an error message">
+    If generation fails:
+    - Make sure the backend is connected (see the chat header for warnings)
+    - Try rephrasing your prompt to be more specific
+    - Check the browser console for detailed error messages
+  </Accordion>
+  
+  <Accordion title="The walkthrough doesn't match my request">
+    The AI interprets your prompt and creates a demonstration. If it's not quite right:
+    - Be more specific in your next request
+    - Use technical terms and framework names
+    - Try breaking complex requests into smaller parts
+  </Accordion>
+  
+  <Accordion title="Can I create multiple walkthroughs?">
+    Yes! Each new walkthrough request replaces the current one in the player. Your chat history is preserved so you can see all your requests.
+  </Accordion>
+</AccordionGroup>
+
+## Example Prompts to Try
+
+<CardGroup cols={2}>
+  <Card title="React Components" icon="react">
+    "Show me how to create a collapsible accordion component with React hooks"
+  </Card>
+  
+  <Card title="API Development" icon="server">
+    "Walk me through building a RESTful API endpoint with Express and middleware"
+  </Card>
+  
+  <Card title="CSS Layouts" icon="palette">
+    "Demonstrate how to create a responsive card grid with CSS Grid"
+  </Card>
+  
+  <Card title="JavaScript Patterns" icon="code">
+    "Teach me how to use the module pattern in JavaScript"
+  </Card>
+</CardGroup>
+
+<Tip>
+  **Pro tip:** After watching a walkthrough, switch to **Chat mode** (toggle off Walkthrough) to ask follow-up questions about what you just learned!
+</Tip>

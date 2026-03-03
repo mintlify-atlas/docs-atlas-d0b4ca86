@@ -1,0 +1,474 @@
+---
+title: "Environment Variables"
+description: "Configure API keys and environment settings for VSpeak"
+---
+
+VSpeak requires API keys for Cerebras, Gemini, and Groq to function. This guide covers all environment variable configuration.
+
+## Required API Keys
+
+**Location:** `backend/config.py:4-13`
+
+```python
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
+
+# API Keys
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+```
+
+<Note>
+VSpeak uses `python-dotenv` to load environment variables from a `.env` file in the project root.
+</Note>
+
+## Environment File Setup
+
+### Creating .env File
+
+Create a `.env` file in your project root directory:
+
+```bash
+touch .env
+```
+
+Add your API keys:
+
+```bash
+# .env
+
+# Cerebras API Key (for script generation)
+CEREBRAS_API_KEY=your_cerebras_api_key_here
+
+# Groq API Key (for TTS and STT)
+GROQ_API_KEY=your_groq_api_key_here
+
+# Gemini API Key (for TTS)
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+<Warning>
+**Security Best Practices:**
+
+1. Never commit `.env` files to version control
+2. Add `.env` to your `.gitignore`
+3. Use separate API keys for development and production
+4. Rotate keys regularly
+5. Restrict API key permissions to minimum required scope
+</Warning>
+
+### .gitignore Configuration
+
+Ensure `.env` is ignored by git:
+
+```bash
+# .gitignore
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# API keys
+*.key
+*.pem
+```
+
+## API Key Requirements
+
+### Cerebras API Key
+
+<ParamField path="CEREBRAS_API_KEY" type="string" required>
+  API key for Cerebras GLM 4.7 script generation.
+</ParamField>
+
+**What it's used for:**
+- Generating structured walkthrough scripts
+- LLM-based narration chunking
+- Action sequence generation
+
+**How to obtain:**
+1. Sign up at [Cerebras Cloud](https://cloud.cerebras.ai)
+2. Navigate to API Keys section
+3. Generate a new API key
+4. Copy and add to `.env`
+
+**Required permissions:**
+- Chat completions API access
+- GLM model access
+
+### Groq API Key
+
+<ParamField path="GROQ_API_KEY" type="string" required>
+  API key for Groq Orpheus TTS and Whisper STT services.
+</ParamField>
+
+**What it's used for:**
+- Orpheus TTS voice generation (if using Orpheus provider)
+- Whisper speech-to-text transcription
+- Word-level timestamp extraction
+
+**How to obtain:**
+1. Sign up at [Groq Cloud](https://console.groq.com)
+2. Go to API Keys
+3. Create a new API key
+4. Add to `.env`
+
+**Required permissions:**
+- Audio API access (TTS and STT)
+- Orpheus model access
+- Whisper model access
+
+### Gemini API Key
+
+<ParamField path="GEMINI_API_KEY" type="string" required>
+  API key for Google Gemini 2.5 Flash TTS services.
+</ParamField>
+
+**What it's used for:**
+- Gemini TTS voice generation (if using Gemini provider)
+- Director's notes-based narration
+- Full-script audio synthesis
+
+**How to obtain:**
+1. Visit [Google AI Studio](https://aistudio.google.com/apikey)
+2. Create a new API key
+3. Enable Gemini API access
+4. Add to `.env`
+
+**Required permissions:**
+- Gemini API access
+- Audio generation permissions
+
+## Provider-Specific Configuration
+
+### Which Keys Do I Need?
+
+Depending on your TTS provider choice, you may not need all keys:
+
+<Tabs>
+  <Tab title="Gemini TTS (Recommended)">
+    **Required API Keys:**
+    - ✅ `CEREBRAS_API_KEY` (script generation)
+    - ✅ `GEMINI_API_KEY` (TTS)
+    - ✅ `GROQ_API_KEY` (STT only)
+    
+    ```bash
+    # .env
+    CEREBRAS_API_KEY=csk_xxxxx
+    GEMINI_API_KEY=AIzaSy_xxxxx
+    GROQ_API_KEY=gsk_xxxxx
+    ```
+  </Tab>
+  
+  <Tab title="Orpheus TTS">
+    **Required API Keys:**
+    - ✅ `CEREBRAS_API_KEY` (script generation)
+    - ✅ `GROQ_API_KEY` (TTS and STT)
+    - ⚠️ `GEMINI_API_KEY` (optional, not used)
+    
+    ```bash
+    # .env
+    CEREBRAS_API_KEY=csk_xxxxx
+    GROQ_API_KEY=gsk_xxxxx
+    # GEMINI_API_KEY not required
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+It's recommended to configure all three keys for maximum flexibility when switching between providers.
+</Note>
+
+## Verifying Configuration
+
+### Environment Check Script
+
+Create a script to verify your configuration:
+
+```python
+# check_env.py
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+required_keys = {
+    "CEREBRAS_API_KEY": "Cerebras (Script Generation)",
+    "GROQ_API_KEY": "Groq (TTS/STT)",
+    "GEMINI_API_KEY": "Gemini (TTS)"
+}
+
+print("Environment Configuration Check\n" + "="*40)
+
+for key, description in required_keys.items():
+    value = os.getenv(key)
+    if value:
+        masked = value[:8] + "..." + value[-4:] if len(value) > 12 else "***"
+        print(f"✅ {key}: {masked}")
+        print(f"   ({description})")
+    else:
+        print(f"❌ {key}: NOT SET")
+        print(f"   ({description})")
+    print()
+
+print("="*40)
+```
+
+Run the check:
+
+```bash
+python check_env.py
+```
+
+Expected output:
+
+```
+Environment Configuration Check
+========================================
+✅ CEREBRAS_API_KEY: csk_1234...5678
+   (Cerebras (Script Generation))
+
+✅ GROQ_API_KEY: gsk_abcd...efgh
+   (Groq (TTS/STT))
+
+✅ GEMINI_API_KEY: AIzaSy_x...yz12
+   (Gemini (TTS))
+
+========================================
+```
+
+### Testing API Connectivity
+
+Test each API connection:
+
+```python
+# test_apis.py
+import config
+from clients import CerebrasClient, GroqSTTClient, GroqTTSClient
+from clients.gemini_client import GeminiTTSClient
+
+print("Testing API Connections...\n")
+
+# Test Cerebras
+try:
+    cerebras = CerebrasClient()
+    print("✅ Cerebras client initialized")
+except Exception as e:
+    print(f"❌ Cerebras failed: {e}")
+
+# Test Groq
+try:
+    groq_stt = GroqSTTClient()
+    groq_tts = GroqTTSClient()
+    print("✅ Groq clients initialized")
+except Exception as e:
+    print(f"❌ Groq failed: {e}")
+
+# Test Gemini
+try:
+    gemini = GeminiTTSClient()
+    print("✅ Gemini client initialized")
+except Exception as e:
+    print(f"❌ Gemini failed: {e}")
+```
+
+## Output Directory Configuration
+
+**Location:** `backend/config.py:74`
+
+```python
+OUTPUT_DIR = "output"
+```
+
+<ParamField path="OUTPUT_DIR" type="string" default="output">
+  Directory for generated audio files, scripts, and timestamps.
+</ParamField>
+
+The output directory is created automatically if it doesn't exist:
+
+```python
+import os
+import config
+
+os.makedirs(config.OUTPUT_DIR, exist_ok=True)
+```
+
+## Environment Variables Reference
+
+### Complete List
+
+| Variable | Type | Required | Default | Description |
+|----------|------|----------|---------|-------------|
+| `CEREBRAS_API_KEY` | `string` | ✅ | None | Cerebras API authentication |
+| `GROQ_API_KEY` | `string` | ✅ | None | Groq API authentication |
+| `GEMINI_API_KEY` | `string` | ⚠️ | None | Gemini API authentication (required for Gemini TTS) |
+
+### Configuration Constants
+
+These are defined in `config.py` and don't require environment variables:
+
+| Constant | Type | Default | Configurable |
+|----------|------|---------|-------------|
+| `CEREBRAS_MODEL` | `string` | `"zai-glm-4.7"` | ✅ |
+| `CEREBRAS_BASE_URL` | `string` | `"https://api.cerebras.ai/v1"` | ✅ |
+| `TTS_PROVIDER` | `string` | `"gemini"` | ✅ |
+| `ORPHEUS_TTS_MODEL` | `string` | `"canopylabs/orpheus-v1-english"` | ✅ |
+| `GEMINI_TTS_MODEL` | `string` | `"gemini-2.5-flash-preview-tts"` | ✅ |
+| `STT_MODEL` | `string` | `"whisper-large-v3-turbo"` | ✅ |
+| `OUTPUT_DIR` | `string` | `"output"` | ✅ |
+
+## Docker Environment Configuration
+
+If running VSpeak in Docker, pass environment variables via docker-compose:
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  vspeak:
+    build: .
+    environment:
+      - CEREBRAS_API_KEY=${CEREBRAS_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    volumes:
+      - ./output:/app/output
+    ports:
+      - "8000:8000"
+```
+
+Run with:
+
+```bash
+docker-compose up
+```
+
+Docker will automatically read from your `.env` file.
+
+## Production Deployment
+
+### Environment Variable Injection
+
+For production deployments, use secure environment variable injection:
+
+<Tabs>
+  <Tab title="Heroku">
+    ```bash
+    heroku config:set CEREBRAS_API_KEY=csk_xxxxx
+    heroku config:set GROQ_API_KEY=gsk_xxxxx
+    heroku config:set GEMINI_API_KEY=AIzaSy_xxxxx
+    ```
+  </Tab>
+  
+  <Tab title="AWS (Elastic Beanstalk)">
+    ```bash
+    eb setenv CEREBRAS_API_KEY=csk_xxxxx \
+             GROQ_API_KEY=gsk_xxxxx \
+             GEMINI_API_KEY=AIzaSy_xxxxx
+    ```
+  </Tab>
+  
+  <Tab title="Kubernetes">
+    ```yaml
+    # secret.yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: vspeak-secrets
+    type: Opaque
+    stringData:
+      CEREBRAS_API_KEY: csk_xxxxx
+      GROQ_API_KEY: gsk_xxxxx
+      GEMINI_API_KEY: AIzaSy_xxxxx
+    ```
+    
+    ```yaml
+    # deployment.yaml
+    envFrom:
+      - secretRef:
+          name: vspeak-secrets
+    ```
+  </Tab>
+  
+  <Tab title="Railway">
+    ```bash
+    railway variables set CEREBRAS_API_KEY=csk_xxxxx
+    railway variables set GROQ_API_KEY=gsk_xxxxx
+    railway variables set GEMINI_API_KEY=AIzaSy_xxxxx
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+**Production Security:**
+
+1. Use secrets management services (AWS Secrets Manager, HashiCorp Vault)
+2. Enable API key rotation
+3. Set up monitoring for unusual API usage
+4. Use separate keys per environment
+5. Implement rate limiting
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="API Key Not Found">
+    **Error:** `None` value for API key
+    
+    **Solutions:**
+    1. Verify `.env` file exists in project root
+    2. Check for typos in variable names
+    3. Ensure `load_dotenv()` is called before accessing keys
+    4. Restart your application after modifying `.env`
+  </Accordion>
+  
+  <Accordion title="Invalid API Key">
+    **Error:** `401 Unauthorized` or `403 Forbidden`
+    
+    **Solutions:**
+    1. Verify API key is correct (no extra spaces)
+    2. Check key hasn't expired
+    3. Ensure key has required permissions
+    4. Regenerate key if compromised
+  </Accordion>
+  
+  <Accordion title="Rate Limiting">
+    **Error:** `429 Too Many Requests`
+    
+    **Solutions:**
+    1. Check your API usage quota
+    2. Implement request throttling
+    3. Upgrade API plan if needed
+    4. Use retry logic with exponential backoff (built-in for Cerebras)
+  </Accordion>
+  
+  <Accordion title="Environment Not Loading">
+    **Error:** Variables are `None` despite `.env` file
+    
+    **Solutions:**
+    1. Ensure `python-dotenv` is installed: `pip install python-dotenv`
+    2. Check working directory is project root
+    3. Verify file is named `.env` (not `.env.txt`)
+    4. Check file encoding (UTF-8)
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Provider Configuration" icon="server" href="/configuration/providers">
+    Configure AI providers
+  </Card>
+  <Card title="LLM Settings" icon="brain" href="/configuration/llm">
+    Configure script generation
+  </Card>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Start using VSpeak
+  </Card>
+</CardGroup>

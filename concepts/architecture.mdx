@@ -1,0 +1,294 @@
+---
+title: System Architecture
+description: Understanding VSpeak's technical architecture and component organization
+---
+
+## Overview
+
+VSpeak is built as a full-stack application that combines a Python FastAPI backend with a React frontend. The architecture is designed around a **dual-mode** paradigm: normal chat mode for interactive coding assistance, and walkthrough mode for audio-visual demonstrations.
+
+## High-Level Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Frontend (React)                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │   Monaco     │  │   Chat       │  │   Walkthrough        │  │
+│  │   Editor     │  │   Panel      │  │   Player             │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │   File       │  │   Terminal   │  │   Timeline           │  │
+│  │   Explorer   │  │   xterm.js   │  │   Scheduler          │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                              ↕ HTTP/WebSocket
+┌─────────────────────────────────────────────────────────────────┐
+│                      Backend (FastAPI)                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │   File API   │  │   Chat API   │  │   Walkthrough API    │  │
+│  │   /api/files │  │   /api/chat  │  │   /api/walkthrough   │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                  Walkthrough Pipeline                    │   │
+│  │  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────────────┐        │   │
+│  │  │ GLM  │→ │ TTS  │→ │ STT  │→ │ Action Sync  │        │   │
+│  │  └──────┘  └──────┘  └──────┘  └──────────────┘        │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              ↕
+┌─────────────────────────────────────────────────────────────────┐
+│                       AI Services                               │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
+│  │  Cerebras    │  │  Gemini TTS  │  │  Groq Whisper        │  │
+│  │  GLM 4.7     │  │              │  │  (STT)               │  │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+## Frontend Architecture
+
+The frontend is built with **React** and **TypeScript**, providing a VS Code-style IDE interface.
+
+### Core Components
+
+| Component | Purpose | Location |
+|-----------|---------|----------|
+| **Monaco Editor** | Full-featured code editor with syntax highlighting | `web/src/App.tsx:485` |
+| **Chat Panel** | AI assistant interface for user interactions | `web/src/components/ChatPanel.tsx` |
+| **Walkthrough Player** | Audio player with timeline and chapter navigation | `web/src/components/WalkthroughPlayer.tsx` |
+| **File Explorer** | Browse and manage workspace files | `web/src/App.tsx:432` |
+| **Terminal (xterm.js)** | Interactive terminal for command execution | `web/src/terminal/` |
+| **Action Executor** | Executes timeline actions in the editor | `web/src/editor/actionExecutor.ts` |
+| **Timeline Scheduler** | Synchronizes actions with audio playback | `web/src/timeline/scheduler.ts` |
+
+### Key Frontend Technologies
+
+- **Monaco Editor**: The same editor that powers VS Code
+- **xterm.js**: Full-featured terminal emulator
+- **React**: Component-based UI framework
+- **TypeScript**: Type-safe development
+
+## Backend Architecture
+
+The backend is a **FastAPI** server written in Python that handles:
+
+1. File system operations in the workspace
+2. AI chat interactions via Cerebras
+3. Walkthrough generation and storage
+4. Terminal command execution
+
+### API Endpoints
+
+```python
+# File System Operations
+GET    /api/files                 # List workspace files
+GET    /api/files/{path}          # Read file content
+PUT    /api/files/{path}          # Write/update file
+POST   /api/files/{path}          # Create new file
+DELETE /api/files/{path}          # Delete file
+POST   /api/files/mkdir/{path}    # Create directory
+
+# Terminal
+POST   /api/terminal/execute      # Execute command
+WS     /ws/terminal               # WebSocket for interactive terminal
+
+# Chat
+POST   /api/chat                  # Send message to AI
+GET    /api/chat/sessions         # List chat sessions
+GET    /api/chat/sessions/{id}    # Get session details
+
+# Walkthrough
+POST   /api/walkthrough/generate  # Generate new walkthrough
+GET    /api/walkthrough/{id}      # Get walkthrough details
+GET    /api/walkthrough/{id}/audio # Stream audio file
+GET    /api/walkthroughs          # List all walkthroughs
+```
+
+### Backend Structure
+
+```
+backend/
+├── server.py              # FastAPI server & endpoints
+├── main.py                # Pipeline orchestration
+├── config.py              # Configuration & API keys
+├── pipeline/
+│   ├── script_generator.py      # LLM script generation
+│   ├── audio_generator.py       # TTS (Orpheus)
+│   ├── gemini_audio_generator.py # TTS (Gemini)
+│   ├── timestamp_extractor.py   # Whisper STT
+│   └── action_sync.py           # Match actions to timestamps
+├── models/
+│   └── types.py           # Pydantic data models
+├── clients/
+│   └── cerebras_client.py # Cerebras API wrapper
+└── utils/
+    └── audio_utils.py     # Audio file manipulation
+```
+
+## AI Services Integration
+
+VSpeak integrates three AI services to power its functionality:
+
+### Cerebras (GLM 4.7)
+
+**Purpose**: Script generation and chat responses
+
+- Generates narration scripts with IDE actions
+- Handles interactive chat in normal mode
+- Creates chapter markers for timeline navigation
+- Produces vocal directions for expressive speech
+
+**Location**: `backend/pipeline/script_generator.py`
+
+### Gemini 2.5 Flash TTS
+
+**Purpose**: Text-to-speech audio generation
+
+- Converts script text to natural-sounding audio
+- No chunking required (processes entire script)
+- Produces WAV audio files
+
+**Location**: `backend/pipeline/gemini_audio_generator.py`
+
+### Groq Whisper
+
+**Purpose**: Speech-to-text with word-level timestamps
+
+- Transcribes generated audio back to text
+- Provides millisecond-precise timestamps for each word
+- Enables synchronization of actions with narration
+
+**Location**: `backend/pipeline/timestamp_extractor.py`
+
+## Data Storage
+
+VSpeak uses a simple file-based storage system:
+
+### Workspace Directory
+
+All user files are stored in a configurable workspace directory:
+
+```python
+WORKSPACE_ROOT = Path(os.getenv("WORKSPACE_ROOT", Path.cwd() / "workspace"))
+```
+
+This directory contains the actual code files that walkthroughs manipulate.
+
+### Sessions Directory
+
+Each walkthrough is stored in its own session directory:
+
+```
+sessions/
+├── {session-uuid-1}/
+│   ├── audio.wav           # Generated audio file
+│   ├── actions.json        # Synced actions with timestamps
+│   ├── script.json         # Original LLM script
+│   ├── timestamps.json     # Word-level timestamps from Whisper
+│   └── walkthrough.json    # Complete walkthrough metadata
+└── {session-uuid-2}/
+    └── ...
+```
+
+### In-Memory Storage
+
+For development, VSpeak uses in-memory dictionaries:
+
+```python
+chat_sessions: dict[str, ChatSession] = {}
+walkthroughs: dict[str, WalkthroughSession] = {}
+```
+
+<Note>
+  In production, these would be replaced with a database like PostgreSQL or MongoDB.
+</Note>
+
+## Communication Flow
+
+### Normal Chat Mode
+
+```
+1. User types message in Chat Panel
+   ↓
+2. Frontend: POST /api/chat
+   ↓
+3. Backend: Build conversation history
+   ↓
+4. Backend: Call Cerebras API
+   ↓
+5. Backend: Return AI response
+   ↓
+6. Frontend: Display response in chat
+```
+
+### Walkthrough Generation
+
+```
+1. User requests walkthrough ("Show me how to...")
+   ↓
+2. Frontend: POST /api/walkthrough/generate
+   ↓
+3. Backend: Run pipeline (see Pipeline page)
+   ↓
+4. Backend: Save session files
+   ↓
+5. Backend: Return walkthrough metadata
+   ↓
+6. Frontend: Load audio and actions
+   ↓
+7. Frontend: Initialize Timeline Scheduler
+   ↓
+8. User clicks Play
+   ↓
+9. Frontend: Actions execute in sync with audio
+```
+
+## Key Design Decisions
+
+### Audio as Clock
+
+The audio element is the **single source of truth** for time. All actions are scheduled relative to `audio.currentTime`, ensuring perfect synchronization even during seek operations.
+
+**See**: [Synchronization](/concepts/synchronization) for details.
+
+### Read-Only Editor
+
+During walkthrough playback, the Monaco editor is set to read-only mode to prevent user interference with the automated typing:
+
+```typescript
+editor.updateOptions({
+  readOnly: true,
+  domReadOnly: true,
+});
+```
+
+### File-Based Sessions
+
+Each walkthrough is self-contained in a directory, making it easy to:
+- Archive and restore walkthroughs
+- Share walkthroughs between users
+- Debug issues by inspecting JSON files
+- Implement future video export features
+
+### Stateless Backend
+
+The FastAPI server is designed to be stateless (except for in-memory caches). All state is stored in:
+- File system (workspace files)
+- Session directories (walkthrough data)
+- Client-side (UI state)
+
+This enables horizontal scaling in the future.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Walkthrough Mode" icon="circle-play" href="/concepts/walkthrough-mode">
+    Learn about the dual-mode system
+  </Card>
+  <Card title="Pipeline" icon="diagram-project" href="/concepts/pipeline">
+    Understand the generation pipeline
+  </Card>
+  <Card title="Synchronization" icon="clock" href="/concepts/synchronization">
+    Explore audio-action synchronization
+  </Card>
+</CardGroup>

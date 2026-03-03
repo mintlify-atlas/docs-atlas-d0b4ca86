@@ -1,0 +1,623 @@
+---
+title: Adding AI Providers
+description: Step-by-step guide to integrating new LLM, TTS, and STT providers into VSpeak
+---
+
+## Overview
+
+VSpeak's architecture is **provider-agnostic**. You can swap or add any AI service for:
+
+- **LLM** - Script generation (OpenAI, Anthropic, Gemini, Llama, etc.)
+- **TTS** - Audio synthesis (ElevenLabs, OpenAI TTS, Azure, etc.)
+- **STT** - Timestamp extraction (Whisper variants, Deepgram, AssemblyAI, etc.)
+
+This guide shows you how to integrate new providers with real code examples.
+
+---
+
+## Adding an LLM Provider
+
+### Example: Adding OpenAI GPT-4
+
+<Steps>
+  <Step title="Create a new client file">
+    Create `backend/clients/openai_client.py`:
+
+    ```python
+    """
+    OpenAI GPT-4 Client for Script Generation
+    """
+    import json
+    import time
+    from openai import OpenAI
+    
+    import config
+    from models.types import GeneratedScript
+    
+    class OpenAIClient:
+        """Client for interacting with OpenAI GPT-4"""
+        
+        def __init__(self):
+            self.client = OpenAI(api_key=config.OPENAI_API_KEY)
+            self.model = config.OPENAI_MODEL
+        
+        def generate_script(self, user_prompt: str, system_prompt: str) -> tuple[GeneratedScript, float]:
+            """
+            Generate a pre-chunked script with actions.
+            
+            Returns:
+                tuple: (GeneratedScript, latency_ms)
+            """
+            start_time = time.perf_counter()
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.7,
+                max_tokens=4096,
+                response_format={"type": "json_object"}  # Force JSON output
+            )
+            
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            
+            # Parse the response
+            content = response.choices[0].message.content
+            script_data = json.loads(content)
+            script = GeneratedScript(**script_data)
+            
+            return script, latency_ms
+    ```
+  </Step>
+
+  <Step title="Add configuration">
+    In `backend/config.py`, add:
+
+    ```python
+    # OpenAI Configuration
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    OPENAI_MODEL = "gpt-4-turbo-preview"
+    ```
+  </Step>
+
+  <Step title="Update the script generator">
+    In `backend/pipeline/script_generator.py`, modify:
+
+    ```python
+    from clients.cerebras_client import CerebrasClient
+    from clients.openai_client import OpenAIClient  # Add this
+    import config
+    
+    class ScriptGenerator:
+        def __init__(self):
+            # Select client based on config
+            if config.LLM_PROVIDER == "openai":
+                self.client = OpenAIClient()
+            else:
+                self.client = CerebrasClient()
+    ```
+  </Step>
+
+  <Step title="Add provider selector to config">
+    ```python
+    # LLM Provider Selection
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "cerebras")  # or "openai"
+    ```
+  </Step>
+
+  <Step title="Add to .env file">
+    ```env
+    LLM_PROVIDER=openai
+    OPENAI_API_KEY=sk-...
+    ```
+  </Step>
+</Steps>
+
+### Example: Adding Anthropic Claude
+
+<CodeGroup>
+```python backend/clients/anthropic_client.py
+"""
+Anthropic Claude Client for Script Generation
+"""
+import json
+import time
+from anthropic import Anthropic
+
+import config
+from models.types import GeneratedScript
+
+class AnthropicClient:
+    """Client for Anthropic Claude"""
+    
+    def __init__(self):
+        self.client = Anthropic(api_key=config.ANTHROPIC_API_KEY)
+        self.model = config.ANTHROPIC_MODEL
+    
+    def generate_script(self, user_prompt: str, system_prompt: str) -> tuple[GeneratedScript, float]:
+        start_time = time.perf_counter()
+        
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=4096,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": user_prompt}
+            ]
+        )
+        
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        
+        # Claude returns text, extract JSON
+        content = response.content[0].text
+        
+        # Handle markdown code blocks
+        if "```json" in content:
+            start = content.find("{")
+            end = content.rfind("}") + 1
+            content = content[start:end]
+        
+        script_data = json.loads(content)
+        script = GeneratedScript(**script_data)
+        
+        return script, latency_ms
+```
+
+```python backend/config.py
+# Anthropic Configuration
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+ANTHROPIC_MODEL = "claude-3-5-sonnet-20241022"
+```
+</CodeGroup>
+
+<Note>
+  **Key Requirements for LLM Providers:**
+  - Must accept system + user prompts
+  - Must output valid JSON matching `GeneratedScript` schema
+  - Should support 4000+ token output for longer tutorials
+</Note>
+
+---
+
+## Adding a TTS Provider
+
+TTS providers fall into two categories:
+
+<CardGroup cols={2}>
+  <Card title="Long-form TTS" icon="waveform-lines">
+    Can handle full scripts (2+ minutes). Use single-shot generation.
+    
+    **Examples:** Gemini TTS, ElevenLabs (with long-form model)
+  </Card>
+  <Card title="Short-form TTS" icon="scissors">
+    Have length limits. Use chunking pipeline with stitching.
+    
+    **Examples:** Orpheus, OpenAI TTS, Azure TTS
+  </Card>
+</CardGroup>
+
+### Example: Adding ElevenLabs TTS
+
+<Steps>
+  <Step title="Install the SDK">
+    ```bash
+    pip install elevenlabs
+    ```
+  </Step>
+
+  <Step title="Create the client">
+    ```python
+    """
+    ElevenLabs TTS Client
+    """
+    import time
+    from pathlib import Path
+    from elevenlabs import generate, save, set_api_key
+    
+    import config
+    
+    class ElevenLabsTTSClient:
+        """Client for ElevenLabs Text-to-Speech"""
+        
+        def __init__(self):
+            set_api_key(config.ELEVENLABS_API_KEY)
+            self.voice = config.ELEVENLABS_VOICE
+            self.model = config.ELEVENLABS_MODEL
+        
+        def generate_speech(self, text: str, output_path: Path) -> float:
+            """
+            Generate speech for a chunk of text.
+            
+            Args:
+                text: Text to convert (100-150 chars for chunked mode)
+                output_path: Path to save the audio file
+            
+            Returns:
+                float: Latency in milliseconds
+            """
+            start_time = time.perf_counter()
+            
+            audio = generate(
+                text=text,
+                voice=self.voice,
+                model=self.model
+            )
+            
+            save(audio, str(output_path))
+            
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            return latency_ms
+    ```
+  </Step>
+
+  <Step title="Configure the provider">
+    ```python
+    # backend/config.py
+    
+    # ElevenLabs Configuration
+    ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+    ELEVENLABS_VOICE = "Josh"  # or any voice ID
+    ELEVENLABS_MODEL = "eleven_monolingual_v1"
+    
+    # TTS Provider Selection
+    TTS_PROVIDER = os.getenv("TTS_PROVIDER", "elevenlabs")
+    ```
+  </Step>
+
+  <Step title="Update the audio generator">
+    Modify `backend/pipeline/audio_generator.py`:
+
+    ```python
+    from clients.groq_client import GroqTTSClient
+    from clients.elevenlabs_client import ElevenLabsTTSClient
+    import config
+    
+    class AudioGenerator:
+        def __init__(self, output_dir: Path):
+            self.output_dir = output_dir
+            # Select TTS client based on config
+            if config.TTS_PROVIDER == "elevenlabs":
+                self.tts_client = ElevenLabsTTSClient()
+            else:
+                self.tts_client = GroqTTSClient()
+    ```
+  </Step>
+</Steps>
+
+### Example: Long-form TTS (OpenAI TTS)
+
+For providers that support long text, create a dedicated generator:
+
+```python backend/pipeline/openai_audio_generator.py
+"""
+OpenAI TTS Audio Generator - Long-form synthesis
+"""
+import time
+from pathlib import Path
+from openai import OpenAI
+
+import config
+from models.types import GeneratedScript
+
+class OpenAIAudioGenerator:
+    """Generates audio using OpenAI TTS (single-shot, no chunking)"""
+    
+    def __init__(self, output_dir: Path):
+        self.output_dir = output_dir
+        self.client = OpenAI(api_key=config.OPENAI_API_KEY)
+        self.model = config.OPENAI_TTS_MODEL
+        self.voice = config.OPENAI_TTS_VOICE
+    
+    def generate_audio(self, script: GeneratedScript) -> tuple[Path, list[float], float]:
+        """
+        Generate audio for the entire script in one API call.
+        
+        Returns:
+            tuple: (audio_path, [latency], 0)
+        """
+        print(f"\n🎙️  Generating audio with OpenAI TTS (single-shot)...")
+        
+        # Combine all chunks into full text
+        full_text = " ".join(chunk.text for chunk in script.chunks)
+        
+        start_time = time.perf_counter()
+        
+        response = self.client.audio.speech.create(
+            model=self.model,
+            voice=self.voice,
+            input=full_text
+        )
+        
+        latency_ms = (time.perf_counter() - start_time) * 1000
+        
+        # Save to file
+        audio_path = self.output_dir / "audio.mp3"
+        response.stream_to_file(str(audio_path))
+        
+        print(f"  ✓ Audio generated in {latency_ms:.0f}ms")
+        
+        return audio_path, [latency_ms], 0  # No stitching needed
+```
+
+<Tip>
+  **When to use which strategy:**
+  - **Long-form:** Provider supports 2+ minutes, better prosody, faster
+  - **Chunked:** Length limits, more control over pacing, parallel generation
+</Tip>
+
+---
+
+## Adding an STT Provider
+
+### Example: Adding Deepgram
+
+<Steps>
+  <Step title="Install the SDK">
+    ```bash
+    pip install deepgram-sdk
+    ```
+  </Step>
+
+  <Step title="Create the client">
+    ```python
+    """
+    Deepgram STT Client for Timestamp Extraction
+    """
+    import time
+    from pathlib import Path
+    from deepgram import Deepgram
+    
+    import config
+    from models.types import TimestampedWord
+    
+    class DeepgramSTTClient:
+        """Client for Deepgram Speech-to-Text"""
+        
+        def __init__(self):
+            self.client = Deepgram(config.DEEPGRAM_API_KEY)
+        
+        def transcribe_with_timestamps(self, audio_path: Path) -> tuple[list[TimestampedWord], float]:
+            """
+            Transcribe audio and extract word-level timestamps.
+            
+            Returns:
+                tuple: (list of TimestampedWord, latency_ms)
+            """
+            start_time = time.perf_counter()
+            
+            with open(audio_path, "rb") as audio_file:
+                audio_data = audio_file.read()
+            
+            response = self.client.transcription.sync_prerecorded(
+                {"buffer": audio_data, "mimetype": "audio/wav"},
+                {
+                    "punctuate": True,
+                    "utterances": True,
+                    "words": True  # Request word-level timestamps
+                }
+            )
+            
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            
+            # Extract word timestamps
+            timestamps = []
+            for word_data in response["results"]["channels"][0]["alternatives"][0]["words"]:
+                timestamps.append(TimestampedWord(
+                    word=word_data["word"],
+                    start_ms=int(word_data["start"] * 1000),
+                    end_ms=int(word_data["end"] * 1000)
+                ))
+            
+            return timestamps, latency_ms
+    ```
+  </Step>
+
+  <Step title="Update the timestamp extractor">
+    ```python
+    # backend/pipeline/timestamp_extractor.py
+    
+    from clients.groq_client import GroqSTTClient
+    from clients.deepgram_client import DeepgramSTTClient
+    import config
+    
+    class TimestampExtractor:
+        def __init__(self):
+            if config.STT_PROVIDER == "deepgram":
+                self.client = DeepgramSTTClient()
+            else:
+                self.client = GroqSTTClient()
+    ```
+  </Step>
+
+  <Step title="Add configuration">
+    ```python
+    # backend/config.py
+    
+    # STT Provider Selection
+    STT_PROVIDER = os.getenv("STT_PROVIDER", "groq")  # or "deepgram"
+    
+    # Deepgram Configuration
+    DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  **STT Provider Requirements:**
+  - Must support **word-level timestamps** (not just sentence-level)
+  - Timestamps must be in seconds or milliseconds
+  - Should handle 2-5 minute audio files
+</Note>
+
+---
+
+## Provider Selection Matrix
+
+### Recommended Combinations
+
+| Use Case | LLM | TTS | STT | Latency | Cost |
+|----------|-----|-----|-----|---------|------|
+| **Fastest** | Cerebras GLM | Gemini TTS | Groq Whisper | ~3-5s | $ |
+| **Best Quality** | GPT-4 | ElevenLabs | Deepgram | ~10-15s | $$$ |
+| **Open Source** | Llama 3.3 | Coqui TTS | Whisper Local | ~20-30s | Free |
+| **Balanced** | Claude Sonnet | OpenAI TTS | AssemblyAI | ~8-12s | $$ |
+
+### Provider Checklist
+
+<AccordionGroup>
+  <Accordion title="LLM Provider">
+    - [ ] Accepts system + user prompts
+    - [ ] Can output structured JSON
+    - [ ] Supports 4000+ tokens output
+    - [ ] Understands code concepts
+    - [ ] Can follow complex instructions
+  </Accordion>
+
+  <Accordion title="TTS Provider">
+    - [ ] Produces natural-sounding speech
+    - [ ] Supports WAV or MP3 output
+    - [ ] Either handles 2+ min text OR supports chunking
+    - [ ] Consistent voice across chunks (if chunked)
+    - [ ] Optional: Supports vocal directions/emotions
+  </Accordion>
+
+  <Accordion title="STT Provider">
+    - [ ] Returns word-level timestamps
+    - [ ] Accurate transcription (95%+ WER)
+    - [ ] Handles technical/code terminology
+    - [ ] Processes 2-5 minute audio
+    - [ ] Low latency (< 10s for 2min audio)
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Testing Your Provider
+
+### Test the Pipeline
+
+```bash
+cd backend
+python main.py \
+  --prompt "Create a simple Python function" \
+  --output test_output
+```
+
+### Verify Output
+
+<Steps>
+  <Step title="Check script generation">
+    ```bash
+    cat test_output/script.json
+    ```
+    
+    Should contain valid JSON with chunks and actions.
+  </Step>
+
+  <Step title="Check audio file">
+    ```bash
+    ls -lh test_output/audio.wav
+    ```
+    
+    Should be a valid audio file (not empty).
+  </Step>
+
+  <Step title="Check timestamps">
+    ```bash
+    cat test_output/timestamps.json
+    ```
+    
+    Should have word-level timestamps:
+    ```json
+    [
+      {"word": "Let's", "start_ms": 120, "end_ms": 450},
+      {"word": "create", "start_ms": 460, "end_ms": 720}
+    ]
+    ```
+  </Step>
+
+  <Step title="Check synchronized actions">
+    ```bash
+    cat test_output/actions.json
+    ```
+    
+    Actions should have `timestamp_ms` values matching word timestamps.
+  </Step>
+</Steps>
+
+---
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="LLM returns invalid JSON">
+    **Problem:** Script generation fails with JSON parse error.
+
+    **Solutions:**
+    - Add `response_format={"type": "json_object"}` to API call (OpenAI)
+    - Improve system prompt to explicitly request JSON
+    - Add JSON extraction logic (look for `{...}` in response)
+    - Use `json_schema` parameter for strict validation
+  </Accordion>
+
+  <Accordion title="TTS audio is choppy">
+    **Problem:** Chunked TTS has audible gaps.
+
+    **Solutions:**
+    - Increase `SILENCE_PADDING_MS` in config
+    - Add crossfade between chunks
+    - Use a long-form TTS provider instead
+    - Ensure chunks end at natural phrase boundaries
+  </Accordion>
+
+  <Accordion title="STT timestamps are inaccurate">
+    **Problem:** Actions fire at wrong times.
+
+    **Solutions:**
+    - Use a higher-quality STT model
+    - Ensure audio quality is good (24kHz+, no noise)
+    - Check timestamp format (seconds vs milliseconds)
+    - Verify trigger words match transcription exactly
+  </Accordion>
+
+  <Accordion title="Rate limit errors">
+    **Problem:** Too many API calls, provider blocks requests.
+
+    **Solutions:**
+    - Reduce `MAX_PARALLEL_TTS` workers
+    - Add retry logic with exponential backoff (see `cerebras_client.py`)
+    - Use provider's batch API if available
+    - Switch to a provider with higher rate limits
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Contributing Your Provider
+
+If you've added a new provider, consider contributing it back:
+
+1. **Add to clients/** - Include your client class
+2. **Update config.py** - Add configuration options
+3. **Add tests** - Ensure it works end-to-end
+4. **Document** - Add to provider list in README
+5. **Submit PR** - Share with the community
+
+<Card title="Submit a Provider Integration" icon="github" href="https://github.com/your-org/vspeak/pulls">
+  Help expand VSpeak's provider ecosystem
+</Card>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Extending Actions" icon="code" href="/development/extending-actions">
+    Add custom IDE action types
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/providers">
+    See all configuration options
+  </Card>
+</CardGroup>

@@ -1,0 +1,297 @@
+---
+title: "LLM Configuration"
+description: "Configure Cerebras GLM 4.7 for script generation and prompting"
+---
+
+VSpeak uses Cerebras GLM 4.7 to generate structured scripts with narration chunks and editor actions. This guide covers all LLM configuration options.
+
+## Model Configuration
+
+### Cerebras GLM 4.7 Settings
+
+**Location:** `backend/config.py:15-18`
+
+```python
+CEREBRAS_MODEL = "zai-glm-4.7"
+CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
+DISABLE_REASONING = True  # Reasoning OFF for faster responses
+```
+
+<ParamField path="CEREBRAS_MODEL" type="string" default="zai-glm-4.7">
+  The Cerebras model identifier. Currently set to GLM 4.7 for optimal script generation.
+</ParamField>
+
+<ParamField path="CEREBRAS_BASE_URL" type="string" default="https://api.cerebras.ai/v1">
+  Base URL for the Cerebras API endpoint.
+</ParamField>
+
+<ParamField path="DISABLE_REASONING" type="boolean" default="true">
+  Controls whether reasoning mode is enabled:
+  - `true`: Faster responses, direct generation
+  - `false`: More detailed analysis, slower but potentially more accurate
+</ParamField>
+
+## Generation Parameters
+
+### Script Generation Settings
+
+**Location:** `backend/config.py:36-38`
+
+```python
+MIN_CHUNK_LENGTH = 100  # Minimum characters per chunk
+MAX_CHUNK_LENGTH = 150  # Maximum characters per chunk
+TARGET_SCRIPT_DURATION_SECONDS = 120  # ~2 minutes
+```
+
+<ParamField path="MIN_CHUNK_LENGTH" type="integer" default="100">
+  Minimum number of characters per narration chunk. Chunks shorter than this will be merged.
+</ParamField>
+
+<ParamField path="MAX_CHUNK_LENGTH" type="integer" default="150">
+  Maximum number of characters per narration chunk. The LLM will aim to keep chunks within this limit.
+</ParamField>
+
+<ParamField path="TARGET_SCRIPT_DURATION_SECONDS" type="integer" default="120">
+  Target duration for generated scripts in seconds (~2 minutes). The LLM uses this to determine script length.
+</ParamField>
+
+<Note>
+Chunk length is critical for TTS quality. 100-150 characters produces natural-sounding speech with proper pacing.
+</Note>
+
+### Inference Parameters
+
+**Location:** `backend/clients/cerebras_client.py:34-42`
+
+```python
+response = self.client.chat.completions.create(
+    model=self.model,
+    messages=[
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
+    ],
+    disable_reasoning=config.DISABLE_REASONING,
+    temperature=0.7,
+    max_tokens=4096
+)
+```
+
+<ParamField path="temperature" type="float" default="0.7">
+  Controls randomness in generation:
+  - `0.0`: Deterministic, same output every time
+  - `0.7`: Balanced creativity and consistency (default)
+  - `1.0`: Maximum creativity, more variation
+</ParamField>
+
+<ParamField path="max_tokens" type="integer" default="4096">
+  Maximum number of tokens in the generated response. 4096 allows for comprehensive scripts.
+</ParamField>
+
+## Retry Logic
+
+The Cerebras client includes automatic retry logic for rate limiting and transient errors.
+
+**Location:** `backend/clients/cerebras_client.py:12-13`
+
+```python
+MAX_RETRIES = 3
+RETRY_DELAY_SECONDS = 5
+```
+
+<ParamField path="MAX_RETRIES" type="integer" default="3">
+  Number of retry attempts for failed requests.
+</ParamField>
+
+<ParamField path="RETRY_DELAY_SECONDS" type="integer" default="5">
+  Base delay in seconds between retries. Uses exponential backoff:
+  - Attempt 1: 5 seconds
+  - Attempt 2: 10 seconds
+  - Attempt 3: 20 seconds
+</ParamField>
+
+### Error Handling
+
+The client automatically retries on:
+- 429 (Rate Limit) errors
+- Queue errors
+- Transient API errors
+
+```python
+try:
+    response = cerebras.generate_script(user_prompt, system_prompt)
+except Exception as e:
+    if "429" in str(e) or "rate" in str(e).lower():
+        # Automatic retry with exponential backoff
+        pass
+    else:
+        # Re-raise non-rate-limit errors
+        raise
+```
+
+<Warning>
+If all retry attempts fail, the exception is re-raised. Ensure your application handles this gracefully.
+</Warning>
+
+## Action Types
+
+The LLM generates scripts with structured editor actions. These are the supported action types:
+
+**Location:** `backend/config.py:60-71`
+
+```python
+ACTION_TYPES = [
+    "create_file",
+    "type_code",
+    "switch_tab",
+    "delete",
+    "move_cursor",
+    "scroll",
+    "highlight",
+    "terminal_command",
+    "run_code",
+    "show_output"
+]
+```
+
+### Action Type Reference
+
+| Action | Description | Example Use |
+|--------|-------------|-------------|
+| `create_file` | Create a new file | "Now let's create app.py" |
+| `type_code` | Type code into editor | "We'll define the main function" |
+| `switch_tab` | Switch between files | "Let's go back to our config file" |
+| `delete` | Delete text | "Remove this old function" |
+| `move_cursor` | Move cursor position | "Jump to the top of the file" |
+| `scroll` | Scroll viewport | "Scroll down to see the imports" |
+| `highlight` | Highlight code | "Notice this important line" |
+| `terminal_command` | Run terminal command | "Let's install the dependencies" |
+| `run_code` | Execute code | "Time to run our program" |
+| `show_output` | Display output | "Here's the result" |
+
+## JSON Response Parsing
+
+The LLM returns structured JSON responses. The client automatically parses and validates them.
+
+**Location:** `backend/clients/cerebras_client.py:67-90`
+
+### Response Format
+
+```json
+{
+  "chunks": [
+    {
+      "narration": "Let's start by creating a new Python file called app.py",
+      "actions": [
+        {
+          "type": "create_file",
+          "data": {"filename": "app.py"}
+        }
+      ]
+    }
+  ]
+}
+```
+
+The parser handles:
+- Markdown code blocks (```json)
+- Bare JSON objects
+- Whitespace and formatting variations
+
+<Note>
+If JSON parsing fails, the client will attempt regex extraction to find valid JSON in the response.
+</Note>
+
+## Vocal Directions (for Orpheus TTS)
+
+When using Orpheus TTS, the LLM can include vocal directions in the narration text.
+
+**Location:** `backend/config.py:46-57`
+
+```python
+VOCAL_DIRECTIONS = [
+    "[cheerful]",
+    "[excited]", 
+    "[thoughtful]",
+    "[whisper]",
+    "[dramatic]",
+    "[encouraging]",
+    "[calm]",
+    "[enthusiastic]",
+    "[gentle]",
+    "[confident]"
+]
+```
+
+### Usage Example
+
+```json
+{
+  "narration": "[excited] Now watch what happens when we run the code!"
+}
+```
+
+<Warning>
+Vocal directions only work with Orpheus TTS. They are ignored by Gemini TTS (use director's notes instead).
+</Warning>
+
+## Usage Example
+
+Complete example of generating a script:
+
+```python
+from clients import CerebrasClient
+import config
+
+# Initialize client
+cerebras = CerebrasClient()
+
+# Define prompts
+system_prompt = """You are an AI coding coach that creates 
+educational coding walkthroughs..."""
+
+user_prompt = "Create a tutorial on building a FastAPI endpoint"
+
+# Generate script
+script, latency = cerebras.generate_script(user_prompt, system_prompt)
+
+print(f"Generated {len(script.chunks)} chunks in {latency:.2f}ms")
+for chunk in script.chunks:
+    print(f"Narration: {chunk.narration}")
+    print(f"Actions: {len(chunk.actions)}")
+```
+
+## Configuration Tips
+
+<AccordionGroup>
+  <Accordion title="Optimizing for Speed">
+    - Keep `DISABLE_REASONING = True`
+    - Use `temperature = 0.7` or lower
+    - Set shorter `TARGET_SCRIPT_DURATION_SECONDS`
+    - Ensure retry logic is enabled
+  </Accordion>
+  
+  <Accordion title="Optimizing for Quality">
+    - Consider `DISABLE_REASONING = False` for complex topics
+    - Use `temperature = 0.5-0.7` for consistency
+    - Adjust chunk lengths for better TTS pacing
+    - Review generated actions for accuracy
+  </Accordion>
+  
+  <Accordion title="Handling Rate Limits">
+    - The client auto-retries with exponential backoff
+    - Monitor `MAX_RETRIES` and `RETRY_DELAY_SECONDS`
+    - Consider implementing request queuing
+    - Check Cerebras API rate limits
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="TTS Configuration" icon="microphone" href="/configuration/tts">
+    Configure text-to-speech for narration
+  </Card>
+  <Card title="Environment Setup" icon="key" href="/configuration/environment">
+    Set up your Cerebras API key
+  </Card>
+</CardGroup>

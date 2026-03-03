@@ -1,0 +1,115 @@
+---
+title: Deployment Overview
+description: Learn how to deploy VSpeak to production environments
+---
+
+VSpeak consists of two main components that need to be deployed:
+
+1. **Backend API** - FastAPI server that handles AI processing, file operations, and walkthrough generation
+2. **Frontend Application** - React/Vite web interface for the IDE experience
+
+## Architecture
+
+VSpeak uses a client-server architecture:
+
+```
+┌─────────────────┐         ┌──────────────────┐
+│                 │         │                  │
+│  React Frontend │────────▶│  FastAPI Backend │
+│  (Vite/Node.js) │  HTTP   │   (Python)       │
+│                 │◀────────│                  │
+└─────────────────┘         └──────────────────┘
+                                     │
+                                     ▼
+                            ┌─────────────────┐
+                            │  External APIs  │
+                            │  - Cerebras     │
+                            │  - Groq         │
+                            │  - Gemini       │
+                            └─────────────────┘
+```
+
+## Deployment Options
+
+<CardGroup cols={2}>
+  <Card title="Development" icon="laptop-code">
+    Run locally with `uvicorn` for backend and `npm run dev` for frontend
+  </Card>
+  
+  <Card title="Production" icon="server">
+    Deploy with `gunicorn` + Nginx for backend, static files for frontend
+  </Card>
+  
+  <Card title="Docker" icon="docker">
+    Containerized deployment with Docker and Docker Compose
+  </Card>
+  
+  <Card title="Cloud Platforms" icon="cloud">
+    Deploy to platforms like AWS, GCP, Azure, or Heroku
+  </Card>
+</CardGroup>
+
+## Prerequisites
+
+<Steps>
+  <Step title="System Requirements">
+    - Python 3.9 or higher
+    - Node.js 18 or higher
+    - 2GB+ RAM
+    - 10GB+ disk space (for audio files and workspace)
+  </Step>
+
+  <Step title="API Keys">
+    Obtain API keys from:
+    - [Cerebras](https://cerebras.ai) - For AI chat and script generation
+    - [Groq](https://groq.com) - For TTS (Orpheus) and STT (Whisper)
+    - [Google AI Studio](https://aistudio.google.com) - For Gemini TTS
+  </Step>
+
+  <Step title="Environment Setup">
+    Configure environment variables for both backend and frontend
+  </Step>
+</Steps>
+
+## Deployment Checklist
+
+Before deploying to production:
+
+- [ ] Configure all required environment variables
+- [ ] Set up proper CORS policies
+- [ ] Configure file upload limits
+- [ ] Set up reverse proxy (Nginx/Apache)
+- [ ] Enable HTTPS with SSL certificates
+- [ ] Configure persistent storage for workspace and sessions
+- [ ] Set up monitoring and logging
+- [ ] Configure backup strategy for user data
+- [ ] Test all API endpoints
+- [ ] Load test the application
+
+## Security Considerations
+
+<Warning>
+  **Important Security Notes:**
+  - Never commit `.env` files to version control
+  - Use strong API keys and rotate them regularly
+  - Configure CORS to allow only trusted origins in production
+  - Implement rate limiting to prevent API abuse
+  - Sanitize file paths to prevent directory traversal attacks
+  - Set command execution timeouts to prevent DoS attacks
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Backend Deployment" icon="python" href="/deployment/backend">
+    Deploy the FastAPI backend server
+  </Card>
+  
+  <Card title="Frontend Deployment" icon="react" href="/deployment/frontend">
+    Build and deploy the React frontend
+  </Card>
+  
+  <Card title="Environment Variables" icon="key" href="/deployment/environment-variables">
+    Configure all environment variables
+  </Card>
+</CardGroup>

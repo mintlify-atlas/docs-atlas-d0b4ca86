@@ -1,0 +1,424 @@
+---
+title: IDE Actions
+description: Automated code editing, file operations, and cursor movements synchronized with audio narration
+---
+
+IDE Actions are the backbone of VSpeak's walkthroughs. They automate coding tasks in the embedded Monaco editor, creating a "watch and learn" experience synchronized perfectly with the AI's voice narration.
+
+## Action Types
+
+VSpeak supports several action types, each designed to simulate realistic coding behavior:
+
+### File Operations
+
+#### Create File
+
+Creates a new file in the virtual file system and opens it in the editor.
+
+```typescript
+{
+  type: "create_file",
+  trigger_word: "create",
+  params: {
+    path: "src/components/Counter.jsx",
+    content: ""  // Optional initial content
+  }
+}
+```
+
+**Execution**:
+```typescript
+// From web/src/editor/actionExecutor.ts
+case 'create_file': {
+  this.fs.createFile(action.path, action.content ?? '');
+  const model = this.fs.openFile(action.path);
+  this.openModel(model, action.path);
+  this.options.onFileCreated?.(action.path);
+  break;
+}
+```
+
+#### Open File (Switch Tab)
+
+Switches to a different file that already exists.
+
+```typescript
+{
+  type: "switch_tab",
+  trigger_word: "switch",
+  params: {
+    path: "src/App.jsx"
+  }
+}
+```
+
+### Code Editing
+
+#### Type Code
+
+Simulates typing code into the editor with optional animation.
+
+```typescript
+{
+  type: "type_code",
+  trigger_word: "write",
+  params: {
+    path: "src/Counter.jsx",
+    text: "import React, { useState } from 'react';\n",
+    charactersPerSecond: 20  // Optional typing speed
+  }
+}
+```
+
+**Typing Animation**:
+```typescript
+// From web/src/editor/actionExecutor.ts
+private startTyping(model: monaco.editor.ITextModel, path: string, text: string, msPerChar: number) {
+  this.typingState = { path, text, offsetChars: 0, msPerChar, model };
+  
+  const tick = () => {
+    if (!this.isPlaying) return;  // Pause-aware
+    
+    const chunkSize = Math.max(1, Math.floor(16 / state.msPerChar));
+    const nextEnd = Math.min(state.text.length, state.offsetChars + chunkSize);
+    const chunk = state.text.slice(state.offsetChars, nextEnd);
+    
+    model.pushEditOperations([], [{
+      range: this.fullInsertRange(model),
+      text: chunk,
+      forceMoveMarkers: true
+    }], () => null);
+    
+    state.offsetChars = nextEnd;
+  };
+  
+  this.typingInterval = window.setInterval(tick, 16);  // 60fps
+}
+```
+
+<Note>
+Typing animations are **pause-aware**: they stop when playback is paused and resume when playing continues.
+</Note>
+
+### Cursor and Navigation
+
+#### Move Cursor
+
+Moves the cursor to a specific line and column, useful for highlighting what's being discussed.
+
+```typescript
+{
+  type: "move_cursor",
+  trigger_word: "notice",
+  params: {
+    path: "src/Counter.jsx",
+    line: 8,
+    column: 15
+  }
+}
+```
+
+**Smooth Scrolling**:
+```typescript
+const position = new this.monacoInstance.Position(action.line, action.column);
+this.editor.setPosition(position);
+this.editor.revealPositionInCenter(position, this.monacoInstance.editor.ScrollType.Smooth);
+```
+
+#### Highlight Range
+
+Temporarily highlights a range of code with a visual decoration.
+
+```typescript
+{
+  type: "highlight",
+  trigger_word: "here",
+  params: {
+    path: "src/Counter.jsx",
+    range: {
+      startLine: 5,
+      startColumn: 1,
+      endLine: 7,
+      endColumn: 50
+    },
+    color: "blue",  // Optional: blue, green, yellow, red
+    durationMs: 3000  // Auto-clear after 3 seconds
+  }
+}
+```
+
+**Decoration Management**:
+```typescript
+private applyHighlight(action: HighlightRangeAction) {
+  const range = new this.monacoInstance.Range(
+    action.range.startLine,
+    action.range.startColumn,
+    action.range.endLine,
+    action.range.endColumn
+  );
+  
+  const className = action.color 
+    ? `timeline-inline-highlight color-${action.color}` 
+    : 'timeline-inline-highlight';
+  
+  this.highlightDecorations = this.editor.deltaDecorations(
+    this.highlightDecorations, 
+    [{ range, options: { inlineClassName: className } }]
+  );
+  
+  if (action.durationMs) {
+    setTimeout(() => {
+      this.highlightDecorations = this.editor.deltaDecorations(
+        this.highlightDecorations, 
+        []
+      );
+    }, action.durationMs);
+  }
+}
+```
+
+### Terminal Actions
+
+See [Terminal Feature](/features/terminal) for detailed terminal action documentation.
+
+## Action Synchronization
+
+Actions are synchronized to the audio using trigger words:
+
+### Trigger Word Matching
+
+```python
+# From backend/main.py (conceptual)
+def sync_actions_to_audio(script: GeneratedScript, timestamps: list[TimestampedWord]):
+    synced = []
+    
+    for chunk in script.chunks:
+        for action in chunk.actions:
+            # Find the word in the transcript
+            matching_word = find_word_in_timestamps(
+                action.trigger_word, 
+                timestamps
+            )
+            
+            if matching_word:
+                synced.append(SyncedAction(
+                    type=action.type,
+                    timestamp_ms=matching_word.start_ms,
+                    trigger_word=action.trigger_word,
+                    params=action.params
+                ))
+    
+    return synced
+```
+
+### Timeline Execution
+
+The WalkthroughPlayer executes actions at precise timestamps:
+
+```typescript
+useEffect(() => {
+  const handleTimeUpdate = () => {
+    const currentMs = audio.currentTime * 1000;
+    
+    // Find actions that should fire at this time
+    const pendingActions = actions.filter(a => 
+      a.timestamp_ms >= lastExecutedMs &&
+      a.timestamp_ms <= currentMs
+    );
+    
+    pendingActions.forEach(action => {
+      actionExecutor.execute(action);
+    });
+    
+    lastExecutedMs = currentMs;
+  };
+  
+  audio.addEventListener('timeupdate', handleTimeUpdate);
+}, [actions, audio]);
+```
+
+## Batch Mode (Seeking)
+
+When the user seeks to a different timestamp, actions are replayed in **batch mode**:
+
+```typescript
+const handleSeek = (targetMs: number) => {
+  // 1. Begin batch mode (no animations)
+  actionExecutor.beginBatch();
+  
+  // 2. Reset IDE to initial state
+  actionExecutor.reset();
+  
+  // 3. Replay all actions up to target time
+  const actionsToReplay = actions.filter(a => a.timestamp_ms <= targetMs);
+  actionsToReplay.forEach(action => {
+    actionExecutor.execute(action);
+  });
+  
+  // 4. Exit batch mode
+  actionExecutor.endBatch();
+  
+  // 5. Seek audio
+  audio.currentTime = targetMs / 1000;
+};
+```
+
+<Tip>
+Batch mode disables typing animations and applies all edits instantly for fast seeking.
+</Tip>
+
+## Virtual File System
+
+Actions operate on a virtual file system managed by `VirtualFileSystem`:
+
+```typescript
+// From web/src/editor/virtualFileSystem.ts
+class VirtualFileSystem {
+  private files = new Map<string, monaco.editor.ITextModel>();
+  private openedPath: string | null = null;
+  
+  createFile(path: string, content: string) {
+    const uri = monaco.Uri.file(path);
+    const model = monaco.editor.createModel(
+      content,
+      this.getLanguageFromPath(path),
+      uri
+    );
+    this.files.set(path, model);
+  }
+  
+  openFile(path: string) {
+    return this.files.get(path);
+  }
+  
+  getLanguageFromPath(path: string) {
+    const ext = path.split('.').pop();
+    const langMap = {
+      'js': 'javascript',
+      'jsx': 'javascriptreact',
+      'ts': 'typescript',
+      'tsx': 'typescriptreact',
+      'py': 'python',
+      'html': 'html',
+      'css': 'css',
+      'json': 'json',
+      // ...
+    };
+    return langMap[ext] || 'plaintext';
+  }
+}
+```
+
+## Action Definition Schema
+
+```python
+# From backend/models/types.py
+class Action(BaseModel):
+    type: Literal[
+        "create_file",
+        "type_code", 
+        "switch_tab",
+        "delete",
+        "move_cursor",
+        "scroll",
+        "highlight",
+        "terminal_command",
+        "run_code",
+        "show_output"
+    ]
+    trigger_word: str  # Word in narration that triggers this
+    params: dict[str, Any]  # Action-specific parameters
+```
+
+## Common Action Patterns
+
+### Create and Edit a File
+
+```json
+[
+  {
+    "type": "create_file",
+    "trigger_word": "create",
+    "params": { "path": "App.js" }
+  },
+  {
+    "type": "type_code",
+    "trigger_word": "import",
+    "params": {
+      "path": "App.js",
+      "text": "import React from 'react';\n"
+    }
+  }
+]
+```
+
+### Switch Files and Highlight
+
+```json
+[
+  {
+    "type": "switch_tab",
+    "trigger_word": "back",
+    "params": { "path": "index.js" }
+  },
+  {
+    "type": "highlight",
+    "trigger_word": "line",
+    "params": {
+      "path": "index.js",
+      "range": { "startLine": 3, "startColumn": 1, "endLine": 3, "endColumn": 50 },
+      "durationMs": 2000
+    }
+  }
+]
+```
+
+## Playback Control Integration
+
+Actions respond to playback state:
+
+```typescript
+setPlaying(playing: boolean) {
+  this.isPlaying = playing;
+  // Typing animations check this.isPlaying before advancing
+}
+
+flushTypingNow() {
+  // When audio ends, immediately finish any partial typing
+  if (this.typingState && this.typingState.offsetChars < this.typingState.text.length) {
+    const remaining = this.typingState.text.slice(this.typingState.offsetChars);
+    this.model.pushEditOperations([], [{
+      range: this.fullInsertRange(this.model),
+      text: remaining
+    }], () => null);
+  }
+  this.cancelTyping();
+}
+```
+
+## Best Practices
+
+### For Walkthrough Creators
+
+1. **Use descriptive trigger words**: Choose words that naturally occur in the narration
+2. **Limit actions per chunk**: 1-3 actions per chunk keeps things clear
+3. **Animate long typing**: Use `charactersPerSecond` for code blocks >50 chars
+4. **Highlight before editing**: Draw attention to the area being modified
+
+### For Developers
+
+1. **Test seeking**: Ensure actions are idempotent and batch-safe
+2. **Handle edge cases**: Missing files, invalid ranges, etc.
+3. **Optimize batch mode**: Disable all animations during rapid replay
+4. **Sync carefully**: Double-check timestamp alignment
+
+## Related Features
+
+<CardGroup cols={2}>
+  <Card title="File System" icon="folder" href="/features/file-system">
+    Virtual file system management
+  </Card>
+  <Card title="Terminal" icon="terminal" href="/features/terminal">
+    Terminal command execution
+  </Card>
+</CardGroup>

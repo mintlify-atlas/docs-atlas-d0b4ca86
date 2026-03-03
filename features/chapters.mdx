@@ -1,0 +1,310 @@
+---
+title: Chapters
+description: Navigate walkthroughs with YouTube-style chapter markers and timeline seeking
+---
+
+Chapters divide walkthroughs into logical sections, making it easy to jump to specific topics, review key concepts, and understand the overall structure at a glance.
+
+## Overview
+
+Chapters provide:
+- **Visual timeline**: See the entire walkthrough structure
+- **Quick navigation**: Jump to any section instantly
+- **Progress tracking**: Know where you are in the tutorial
+- **Hover previews**: See chapter details before seeking
+
+## Chapter Timeline
+
+The chapter timeline appears below the playback controls:
+
+{/* Chapter timeline visualization - shows chapter segments on audio timeline */}
+
+### Timeline Features
+
+<CardGroup cols={2}>
+  <Card title="Color-coded segments" icon="palette">
+    Past chapters appear dimmed, current chapter is highlighted, future chapters are neutral
+  </Card>
+  <Card title="Proportional sizing" icon="ruler">
+    Segment width reflects actual chapter duration
+  </Card>
+  <Card title="Click to seek" icon="mouse-pointer">
+    Click anywhere on the timeline to jump to that moment
+  </Card>
+  <Card title="Drag scrubbing" icon="hand">
+    Click and drag to scrub through the walkthrough
+  </Card>
+</CardGroup>
+
+## Chapter List
+
+Below the timeline, you'll find a collapsible list of all chapters:
+
+```typescript
+// From web/src/components/ChapterTimeline.tsx
+<div className="chapter-list">
+  <div className="chapter-list-header">
+    <span>Chapters</span>
+    <span className="chapter-count">{chapters.length}</span>
+  </div>
+  <div className="chapter-list-items">
+    {chapters.map((chapter) => (
+      <button onClick={() => onSeek(chapter.start_ms)}>
+        <span className="chapter-item-title">{chapter.title}</span>
+        <span className="chapter-item-time">{formatTime(chapter.start_ms)}</span>
+      </button>
+    ))}
+  </div>
+</div>
+```
+
+### Chapter Status Indicators
+
+- **Checkmark**: Chapter has been completed
+- **Filled circle**: Currently playing this chapter
+- **Empty circle**: Chapter hasn't been reached yet
+
+## Chapter Data Structure
+
+Chapters are defined during script generation:
+
+```python
+# From backend/models/types.py
+class Chapter(BaseModel):
+    id: str
+    title: str  # "Setup the Project"
+    description: Optional[str]  # "Install dependencies and create files"
+    start_chunk_index: int  # Which script chunk starts this chapter
+    end_chunk_index: int  # Which script chunk ends this chapter
+    start_ms: Optional[int]  # Calculated after audio generation
+    end_ms: Optional[int]  # Calculated after audio generation
+```
+
+### Timestamp Calculation
+
+Chapter timestamps are calculated based on chunk positions:
+
+```python
+# From backend/server.py
+for chapter in chapters_with_snapshots:
+    start_word_idx = int(chapter.start_chunk_index * words_per_chunk)
+    end_word_idx = int((chapter.end_chunk_index + 1) * words_per_chunk) - 1
+    
+    if start_word_idx < len(result.timestamps):
+        chapter.start_ms = result.timestamps[start_word_idx].start_ms
+    if end_word_idx < len(result.timestamps):
+        chapter.end_ms = result.timestamps[end_word_idx].end_ms
+```
+
+## Hover Tooltips
+
+Hover over the timeline to see chapter details:
+
+```typescript
+// From web/src/components/ChapterTimeline.tsx
+{hoveredChapter && (
+  <div className="chapter-tooltip">
+    <div className="tooltip-title">{hoveredChapter.title}</div>
+    {hoveredChapter.description && (
+      <div className="tooltip-description">{hoveredChapter.description}</div>
+    )}
+    <div className="tooltip-time">
+      {formatTime(hoveredChapter.start_ms)} - {formatTime(hoveredChapter.end_ms)}
+    </div>
+  </div>
+)}
+```
+
+## Current Chapter Indicator
+
+The active chapter is displayed prominently:
+
+```typescript
+{currentChapter && (
+  <div className="current-chapter-label">
+    <span className="chapter-icon">✓</span>
+    <span className="chapter-name">{currentChapter.title}</span>
+  </div>
+)}
+```
+
+## Seeking Behavior
+
+When you click a chapter:
+
+<Steps>
+  <Step title="Seek to timestamp">
+    Audio player jumps to `chapter.start_ms`
+  </Step>
+  
+  <Step title="Rebuild IDE state">
+    Action executor replays all actions up to that point in batch mode
+  </Step>
+  
+  <Step title="Resume playback">
+    If playing, continue from the new position; if paused, stay paused
+  </Step>
+</Steps>
+
+```typescript
+// From web/src/editor/actionExecutor.ts
+beginBatch() {
+  this.isBatch = true;
+  this.cancelTyping();  // Apply actions instantly during seek
+}
+
+endBatch() {
+  this.isBatch = false;
+}
+```
+
+<Note>
+Batch mode ensures seeking is fast and deterministic—no animations, just instant state reconstruction.
+</Note>
+
+## Chapter Snapshots
+
+Chapters can include IDE state snapshots for instant restoration:
+
+```python
+# From backend/models/types.py
+class IDEStateSnapshot(BaseModel):
+    files: dict[str, str]  # filename -> content
+    open_tabs: list[str]
+    active_file: Optional[str]
+    cursor_position: Optional[dict[str, int]]  # {line, column}
+    terminal_output: list[str]
+
+class ChapterWithSnapshot(Chapter):
+    snapshot: Optional[IDEStateSnapshot] = None
+```
+
+<Tip>
+Snapshots make seeking to later chapters faster by avoiding full action replay.
+</Tip>
+
+## Time Formatting
+
+Chapter times are displayed in `M:SS` format:
+
+```typescript
+// From web/src/components/ChapterTimeline.tsx
+function formatTime(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '0:00';
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+```
+
+Examples:
+- `0:00` - Start
+- `1:23` - 1 minute, 23 seconds
+- `12:05` - 12 minutes, 5 seconds
+
+## Interactive Examples
+
+### Clicking a Chapter
+
+```typescript
+<button
+  className="chapter-list-item"
+  onClick={() => onSeek(chapter.start_ms ?? 0)}
+>
+  <span className="chapter-item-title">{chapter.title}</span>
+  <span className="chapter-item-time">{formatTime(chapter.start_ms)}</span>
+</button>
+```
+
+### Scrubbing the Timeline
+
+```typescript
+const handleMouseMove = (e: React.MouseEvent) => {
+  const rect = timelineRef.current.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const percentage = Math.max(0, Math.min(1, x / rect.width));
+  const hoverTimeMs = percentage * totalDurationMs;
+  
+  // Find chapter at this time
+  const chapter = chapters.find(ch =>
+    hoverTimeMs >= ch.start_ms && hoverTimeMs < ch.end_ms
+  );
+  
+  setHoveredChapter(chapter ?? null);
+  
+  if (isDragging) {
+    onSeek(hoverTimeMs);  // Live scrubbing
+  }
+};
+```
+
+## Visual States
+
+### Chapter Segment Classes
+
+```css
+.chapter-segment {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.chapter-segment.active {
+  background: rgba(59, 130, 246, 0.3);  /* Blue highlight */
+}
+
+.chapter-segment.past {
+  background: rgba(255, 255, 255, 0.05);  /* Dimmed */
+}
+```
+
+### Progress Overlay
+
+```typescript
+const progressPercentage = totalDurationMs > 0 
+  ? (currentTimeMs / totalDurationMs) * 100 
+  : 0;
+
+<div 
+  className="timeline-progress" 
+  style={{ width: `${progressPercentage}%` }}
+/>
+```
+
+## Accessibility
+
+- **Keyboard navigation**: Arrow keys to move between chapters
+- **Screen reader support**: Chapter titles and times announced
+- **Focus indicators**: Clear visual feedback for focused chapter
+
+## Example Walkthrough Chapters
+
+For a "Build a React Counter" walkthrough:
+
+1. **Project Setup** (0:00 - 0:45)
+   - Create project structure
+   - Install dependencies
+
+2. **Counter Component** (0:45 - 2:30)
+   - Create Counter.jsx
+   - Implement state with useState
+   - Add increment/decrement buttons
+
+3. **Styling** (2:30 - 3:45)
+   - Create Counter.css
+   - Add button styles
+   - Center the component
+
+4. **Testing** (3:45 - 4:30)
+   - Run the development server
+   - Test counter functionality
+
+## Related Features
+
+<CardGroup cols={2}>
+  <Card title="Walkthrough Generation" icon="wand-magic-sparkles" href="/features/walkthrough-generation">
+    How chapters are created
+  </Card>
+  <Card title="IDE Actions" icon="play" href="/features/ide-actions">
+    Actions executed within chapters
+  </Card>
+</CardGroup>

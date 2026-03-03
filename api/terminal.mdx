@@ -1,0 +1,383 @@
+---
+title: Terminal API
+description: Execute shell commands in the workspace and get real-time output
+---
+
+The Terminal API allows you to execute shell commands within the workspace, both via REST and WebSocket.
+
+<Warning>
+  Commands run with the same permissions as the server process. Be careful with destructive operations.
+</Warning>
+
+## Execute Command (REST)
+
+<api method="POST" endpoint="/api/terminal/execute">
+  Execute a shell command and get the output.
+</api>
+
+### Request Body
+
+<ParamField body="command" type="string" required>
+  The shell command to execute (e.g., `"ls -la"`, `"npm install"`, `"python test.py"`).
+</ParamField>
+
+<ParamField body="cwd" type="string">
+  Optional working directory relative to workspace root. Defaults to workspace root if not specified.
+</ParamField>
+
+### Request Example
+
+```json
+{
+  "command": "python main.py",
+  "cwd": "src"
+}
+```
+
+### Response
+
+<ResponseField name="output" type="string">
+  Combined stdout and stderr from the command.
+</ResponseField>
+
+<ResponseField name="exit_code" type="integer">
+  The command's exit code:
+  - `0` - Success
+  - `1-255` - Error codes
+  - `124` - Timeout (30 seconds)
+</ResponseField>
+
+<ResponseField name="command" type="string">
+  The command that was executed (echoed back).
+</ResponseField>
+
+### Response Example
+
+```json
+{
+  "output": "Hello, World!\nScript completed successfully.",
+  "exit_code": 0,
+  "command": "python main.py"
+}
+```
+
+### Error Handling
+
+<ResponseField name="Timeout">
+  Commands that exceed 30 seconds return:
+  
+  ```json
+  {
+    "output": "Command timed out after 30 seconds",
+    "exit_code": 124,
+    "command": "sleep 60"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="Exception">
+  If the command fails to execute:
+  
+  ```json
+  {
+    "output": "Command not found: invalidcommand",
+    "exit_code": 1,
+    "command": "invalidcommand"
+  }
+  ```
+</ResponseField>
+
+### cURL Examples
+
+```bash
+# List files
+curl -X POST http://localhost:8000/api/terminal/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "ls -la"
+  }'
+
+# Install Python dependencies
+curl -X POST http://localhost:8000/api/terminal/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "pip install -r requirements.txt"
+  }'
+
+# Run tests in specific directory
+curl -X POST http://localhost:8000/api/terminal/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "pytest",
+    "cwd": "tests"
+  }'
+
+# Git status
+curl -X POST http://localhost:8000/api/terminal/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "git status"
+  }'
+```
+
+---
+
+## Interactive Terminal (WebSocket)
+
+<api method="WebSocket" endpoint="ws://localhost:8000/ws/terminal">
+  Establish a WebSocket connection for interactive command execution.
+</api>
+
+### Connection
+
+Connect using any WebSocket client:
+
+```javascript
+const ws = new WebSocket('ws://localhost:8000/ws/terminal');
+
+ws.onopen = () => {
+  console.log('Terminal connected');
+};
+
+ws.onmessage = (event) => {
+  const result = JSON.parse(event.data);
+  console.log('Output:', result.output);
+  console.log('Exit code:', result.exit_code);
+};
+
+ws.onerror = (error) => {
+  console.error('WebSocket error:', error);
+};
+
+ws.onclose = () => {
+  console.log('Terminal disconnected');
+};
+```
+
+### Sending Commands
+
+Send JSON-encoded `TerminalCommand` objects:
+
+```javascript
+ws.send(JSON.stringify({
+  command: 'ls -la',
+  cwd: 'src'
+}));
+```
+
+### Receiving Responses
+
+Responses are JSON objects with the same schema as the REST endpoint:
+
+```json
+{
+  "output": "total 24\ndrwxr-xr-x  5 user  staff  160 Mar  3 14:00 .\ndrwxr-xr-x  8 user  staff  256 Mar  3 13:00 ..",
+  "exit_code": 0,
+  "command": "ls -la"
+}
+```
+
+### Python Example
+
+```python
+import asyncio
+import websockets
+import json
+
+async def terminal_session():
+    uri = "ws://localhost:8000/ws/terminal"
+    
+    async with websockets.connect(uri) as websocket:
+        # Send command
+        await websocket.send(json.dumps({
+            "command": "python --version"
+        }))
+        
+        # Receive response
+        response = await websocket.recv()
+        result = json.loads(response)
+        
+        print(f"Output: {result['output']}")
+        print(f"Exit code: {result['exit_code']}")
+
+asyncio.run(terminal_session())
+```
+
+### JavaScript/Node.js Example
+
+```javascript
+const WebSocket = require('ws');
+
+const ws = new WebSocket('ws://localhost:8000/ws/terminal');
+
+ws.on('open', function open() {
+  // Execute multiple commands
+  ws.send(JSON.stringify({ command: 'npm --version' }));
+});
+
+ws.on('message', function incoming(data) {
+  const result = JSON.parse(data);
+  console.log('Command:', result.command);
+  console.log('Output:', result.output);
+  console.log('Exit code:', result.exit_code);
+  console.log('---');
+  
+  // Send another command after receiving response
+  if (result.command === 'npm --version') {
+    ws.send(JSON.stringify({ command: 'node --version' }));
+  } else {
+    ws.close();
+  }
+});
+```
+
+---
+
+## Working Directory
+
+By default, commands execute in the **workspace root**. You can specify a different directory:
+
+<CodeGroup>
+
+```json REST
+{
+  "command": "pytest",
+  "cwd": "tests"  // Runs in workspace_root/tests/
+}
+```
+
+```javascript WebSocket
+ws.send(JSON.stringify({
+  command: 'npm install',
+  cwd: 'frontend'  // Runs in workspace_root/frontend/
+}));
+```
+
+</CodeGroup>
+
+<Note>
+  The `cwd` path is **relative to the workspace root** and cannot access parent directories.
+</Note>
+
+---
+
+## Timeout
+
+All commands have a **30-second timeout** for safety:
+
+```json
+{
+  "command": "sleep 60"
+}
+```
+
+Returns:
+
+```json
+{
+  "output": "Command timed out after 30 seconds",
+  "exit_code": 124,
+  "command": "sleep 60"
+}
+```
+
+<Warning>
+  Long-running processes (servers, watch modes) will be killed after 30 seconds. Use these in separate terminal windows instead.
+</Warning>
+
+---
+
+## Security Considerations
+
+<AccordionGroup>
+  <Accordion title="Command Injection" icon="shield-halved">
+    Commands are executed via `subprocess.run` with `shell=True`, which can be vulnerable to injection. Always validate user input before passing to the API.
+  </Accordion>
+  
+  <Accordion title="Permissions" icon="lock">
+    Commands run with the same permissions as the server process. Ensure the server doesn't run as root or with elevated privileges.
+  </Accordion>
+  
+  <Accordion title="Workspace Isolation" icon="folder-tree">
+    Commands can only change directories within the workspace root. However, they can still access the entire filesystem via absolute paths in commands.
+  </Accordion>
+  
+  <Accordion title="No Authentication" icon="user-lock">
+    This API has no authentication. Do not expose it to untrusted networks.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Install Dependencies" icon="download">
+    ```bash
+    npm install
+    pip install -r requirements.txt
+    ```
+  </Card>
+  
+  <Card title="Run Tests" icon="flask">
+    ```bash
+    pytest
+    npm test
+    go test ./...
+    ```
+  </Card>
+  
+  <Card title="Build Projects" icon="hammer">
+    ```bash
+    npm run build
+    cargo build --release
+    make
+    ```
+  </Card>
+  
+  <Card title="Git Operations" icon="code-branch">
+    ```bash
+    git status
+    git add .
+    git commit -m "message"
+    ```
+  </Card>
+  
+  <Card title="Run Scripts" icon="file-code">
+    ```bash
+    python main.py
+    node index.js
+    ./run.sh
+    ```
+  </Card>
+  
+  <Card title="File Operations" icon="file">
+    ```bash
+    cat config.json
+    grep -r "TODO" .
+    find . -name "*.py"
+    ```
+  </Card>
+</CardGroup>
+
+---
+
+## Pydantic Model
+
+The `TerminalCommand` model is defined in `backend/models/types.py`:
+
+```python
+class TerminalCommand(BaseModel):
+    """Terminal command request"""
+    command: str
+    cwd: Optional[str] = None
+```
+
+The response uses the `TerminalResponse` model (defined in `backend/server.py`):
+
+```python
+class TerminalResponse(BaseModel):
+    output: str
+    exit_code: int
+    command: str
+```

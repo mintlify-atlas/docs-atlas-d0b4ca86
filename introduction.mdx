@@ -1,0 +1,143 @@
+---
+title: Introduction
+description: Transform coding tasks into cinematic, voice-narrated tutorials with AI-powered walkthroughs
+---
+
+<img
+  className="block"
+  src="/logo.png"
+  alt="VSpeak Logo"
+/>
+
+# Welcome to VSpeak
+
+**Watch code write itself while an AI voice explains every step in perfect sync.**
+
+VSpeak transforms any coding task into a **cinematic, voice-narrated tutorial**. Think Cursor IDE meets YouTube tutorials — the AI writes code, creates files, runs commands, and explains everything in real-time with perfect audio-visual synchronization.
+
+<Note>
+  **Demo Preloaded!** Clone and run — a sample walkthrough is ready to play immediately.
+</Note>
+
+## What Makes VSpeak Powerful
+
+<CardGroup cols={2}>
+  <Card title="Fully Modular" icon="puzzle-piece">
+    Swap out any component without touching the rest. Use any LLM, TTS, or STT provider you prefer.
+  </Card>
+  <Card title="Millisecond-Perfect Sync" icon="clock">
+    Audio-driven timeline with single-clock architecture. No drift, no desync — seeking instantly reconstructs IDE state.
+  </Card>
+  <Card title="Provider-Agnostic" icon="shuffle">
+    Works with OpenAI, Anthropic, Gemini, Llama, ElevenLabs, Whisper, and more. You choose your stack.
+  </Card>
+  <Card title="Smart Audio Handling" icon="waveform">
+    TTS models with long-form support get single-shot synthesis. Length-limited models route through seamless chunking pipeline.
+  </Card>
+</CardGroup>
+
+## Architecture Overview
+
+VSpeak uses a **pluggable pipeline architecture** where each component is independent and swappable:
+
+| Component | What It Does | Swap In Any... |
+|-----------|--------------|----------------|
+| **LLM** | Generates script + IDE actions | OpenAI, Anthropic, Gemini, Llama, Mistral, etc. |
+| **TTS** | Synthesizes expressive voice | ElevenLabs, OpenAI TTS, Azure, Coqui, Bark, etc. |
+| **STT** | Extracts word timestamps for sync | Whisper (any variant), Deepgram, AssemblyAI, etc. |
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     Frontend (React + Vite)                          │
+│  ┌──────────────┬───────────────────────────┬────────────────────┐  │
+│  │  📁 Explorer │      Monaco Editor         │   💬 Chat Panel   │  │
+│  │              │   (VS Code's editor)       │   🎵 Audio Player │  │
+│  │              ├───────────────────────────┤   📑 Chapters      │  │
+│  │              │      Xterm.js Terminal     │                    │  │
+│  └──────────────┴───────────────────────────┴────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Backend (FastAPI)                               │
+│  ┌─────────────────────────────────────────────────────────────────┐│
+│  │                    🔄 Generation Pipeline                        ││
+│  │                                                                  ││
+│  │   [Any LLM] ──► [Any TTS] ──► [Any Whisper] ──► Timeline JSON   ││
+│  │       │              │              │                            ││
+│  │   Script +      Voice Audio    Word-level         Synced        ││
+│  │   Actions                      Timestamps         Actions       ││
+│  └─────────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+## How It Works
+
+<Steps>
+  <Step title="Generate Script">
+    The LLM creates a narrative script with timestamped IDE actions (create files, type code, run commands).
+  </Step>
+  <Step title="Synthesize Audio">
+    TTS converts the script into expressive voice narration. Long scripts are automatically chunked and stitched seamlessly.
+  </Step>
+  <Step title="Extract Timestamps">
+    Whisper STT processes the audio to extract word-level timestamps for perfect synchronization.
+  </Step>
+  <Step title="Sync Actions">
+    The timeline engine maps IDE actions to audio timestamps, creating a single synchronized playback.
+  </Step>
+</Steps>
+
+## Key Features
+
+### Audio-Driven Timeline
+
+Unlike screen recordings, VSpeak uses the **audio element as the master clock**:
+- All IDE actions fire relative to `audio.currentTime`
+- Seeking instantly reconstructs IDE state at any point
+- No drift between audio and visual elements
+
+### Interactive Chapters
+
+Navigate your walkthrough with automatically generated chapters:
+- Click any chapter to jump instantly
+- IDE state reconstructs from scratch at the new position
+- Perfect for reviewing specific sections
+
+### Full IDE Integration
+
+- **Monaco Editor** — The same editor powering VS Code
+- **Xterm.js Terminal** — Real terminal with command execution
+- **File Explorer** — Browse and manage your workspace
+- **Chat Panel** — Ask questions and generate new walkthroughs
+
+## Tech Stack
+
+| Layer | Technologies |
+|-------|-------------|
+| **Frontend** | React 19, TypeScript, Monaco Editor, Xterm.js, Tailwind, Vite |
+| **Backend** | FastAPI, Pydantic, Python 3.11+ |
+| **AI** | Any LLM • Any TTS • Any Whisper-compatible STT |
+
+## Get Started
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get VSpeak running in minutes with the preloaded demo walkthrough.
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Complete setup guide with prerequisites and environment configuration.
+  </Card>
+</CardGroup>
+
+## Use Cases
+
+- **Learning & Teaching** — Create engaging coding tutorials with professional narration
+- **Code Reviews** — Walk through changes with audio explanations
+- **Documentation** — Generate interactive guides for complex features
+- **Onboarding** — Help new developers understand your codebase
+- **Presentations** — Create polished demos without screen recording
+
+<Note>
+  VSpeak is open source and released under the MIT license. Contributions are welcome!
+</Note>

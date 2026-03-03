@@ -1,0 +1,173 @@
+---
+title: Chat Mode
+description: Interact with VSpeak's AI coding coach through an intelligent chat interface
+---
+
+VSpeak offers two interaction modes: **Chat Mode** and **Walkthrough Mode**. Chat Mode provides a conversational interface for quick questions and coding assistance without generating full walkthroughs.
+
+## Overview
+
+Chat Mode is designed for:
+- Quick coding questions and answers
+- Getting explanations of code concepts
+- Debugging assistance
+- General programming help
+
+When you need a full guided demo with voice narration and IDE actions, switch to [Walkthrough Mode](/features/walkthrough-generation).
+
+## Toggling Between Modes
+
+<Steps>
+  <Step title="Locate the mode toggle">
+    In the chat panel header, you'll see a "Walkthrough" toggle button with a play icon.
+  </Step>
+  
+  <Step title="Switch to Chat Mode">
+    Click the toggle to turn it OFF (gray state). The input placeholder will change to "Ask a question..."
+  </Step>
+  
+  <Step title="Ask your question">
+    Type your coding question and press Enter or click the send button.
+  </Step>
+</Steps>
+
+## Features
+
+### Conversational Context
+
+Chat Mode maintains session history, allowing you to:
+- Ask follow-up questions
+- Reference previous answers
+- Build on earlier conversations
+
+```typescript
+// From backend/server.py
+AGENT_SYSTEM_PROMPT = """You are an AI coding assistant integrated into an IDE. You help users write, understand, and debug code.
+
+You have access to the user's workspace and can:
+1. Read files to understand context
+2. Write/modify files to implement changes
+3. Run terminal commands
+4. Create new files and directories
+"""
+```
+
+<Note>
+Chat sessions are stored in-memory and persist until you refresh the page. Each session maintains up to 20 messages of context.
+</Note>
+
+### Smart Responses
+
+The AI assistant provides:
+- **Code examples** with syntax highlighting
+- **Explanations** of programming concepts
+- **Debugging suggestions** for errors
+- **Best practices** and recommendations
+
+### Walkthrough Suggestions
+
+When you ask the AI to "show me", "demonstrate", or "walk me through" something, it will suggest switching to Walkthrough Mode:
+
+<Tip>
+For visual, hands-on learning, the AI may recommend generating a walkthrough instead of a text-based response.
+</Tip>
+
+## Usage Examples
+
+### Quick Question
+```
+You: What's the difference between let and const in JavaScript?
+
+AI: In JavaScript, `let` and `const` both declare block-scoped variables, but...
+```
+
+### Debugging Help
+```
+You: I'm getting "Cannot read property 'map' of undefined" in React
+
+AI: This error typically occurs when you try to call .map() on a variable that is undefined...
+```
+
+### Code Explanation
+```
+You: Explain what async/await does
+
+AI: async/await is syntactic sugar for working with Promises in JavaScript...
+```
+
+## Session Management
+
+Chat sessions are automatically created and managed:
+
+- **Auto-created**: First message creates a new session
+- **Persistent ID**: Sessions maintain a unique `session_id`
+- **Context window**: Last 20 messages are included in each request
+
+```typescript
+// Session data structure from backend/models/types.py
+class ChatSession(BaseModel):
+    id: str
+    title: str = "New Chat"
+    messages: list[ChatMessage]
+    created_at: datetime
+    updated_at: datetime
+```
+
+## API Integration
+
+Chat Mode uses the `/api/chat` endpoint:
+
+```typescript
+// From web/src/api/client.ts
+export async function sendChatMessage(request: {
+  message: string;
+  session_id?: string;
+}) {
+  const response = await fetch(`${API_BASE}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request)
+  });
+  return response.json();
+}
+```
+
+## Keyboard Shortcuts
+
+- **Enter**: Send message
+- **Shift + Enter**: New line in input
+
+## Visual Indicators
+
+### Loading States
+
+While the AI is thinking, you'll see:
+- Animated dots
+- "Thinking..." status text
+- Disabled input field
+
+### Connection Status
+
+A warning icon appears in the header if the backend server is disconnected.
+
+<Note>
+If you see a connection warning, ensure the backend server is running on `localhost:8000`.
+</Note>
+
+## Best Practices
+
+1. **Be specific**: Detailed questions get better answers
+2. **Use context**: Reference previous messages in follow-ups
+3. **Switch modes**: Use Walkthrough Mode for hands-on learning
+4. **Check connection**: Verify the backend is running if responses fail
+
+## Related Features
+
+<CardGroup cols={2}>
+  <Card title="Walkthrough Generation" icon="play" href="/features/walkthrough-generation">
+    Generate audio-narrated coding demos
+  </Card>
+  <Card title="IDE Actions" icon="code" href="/features/ide-actions">
+    Automated code editing and navigation
+  </Card>
+</CardGroup>

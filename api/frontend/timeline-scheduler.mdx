@@ -1,0 +1,247 @@
+---
+title: TimelineScheduler
+description: Audio-synchronized action scheduler for timeline-based animations
+---
+
+## Overview
+
+The `TimelineScheduler` is a pull-based scheduler that synchronizes timeline actions with an HTML audio element. It uses the audio's `currentTime` as the source of truth and executes actions when the playback reaches their scheduled timestamps.
+
+The scheduler maintains a pointer to the next unfired action and checks on each animation frame whether it's time to execute. This approach provides smooth, audio-synchronized animations with configurable drift tolerance.
+
+## Constructor
+
+```typescript
+new TimelineScheduler(options: TimelineSchedulerOptions)
+```
+
+<ParamField path="options" type="TimelineSchedulerOptions" required>
+  Configuration object for the scheduler
+
+  <ParamField path="options.audio" type="HTMLAudioElement" required>
+    The audio element to synchronize with
+  </ParamField>
+
+  <ParamField path="options.actions" type="TimelineAction[]">
+    Array of timeline actions to schedule (can also be set later via `setActions`)
+  </ParamField>
+
+  <ParamField path="options.callbacks" type="TimelineSchedulerCallbacks" required>
+    Callbacks for handling scheduler events
+
+    <ParamField path="callbacks.onAction" type="(action: TimelineAction, meta: FiredActionMeta) => void" required>
+      Called when an action is fired. Receives the action and metadata about timing/drift.
+    </ParamField>
+
+    <ParamField path="callbacks.onComplete" type="() => void">
+      Called when all actions have been executed
+    </ParamField>
+
+    <ParamField path="callbacks.onSeek" type="(timeMs: number) => void">
+      Called when the audio is seeked to a new position
+    </ParamField>
+
+    <ParamField path="callbacks.onReset" type="() => void">
+      Called when the scheduler is reset
+    </ParamField>
+  </ParamField>
+
+  <ParamField path="options.toleranceMs" type="number" default="16">
+    Maximum tolerated drift before firing an action early/late (defaults to one frame at 60fps)
+  </ParamField>
+</ParamField>
+
+### Example
+
+```typescript
+const audioElement = document.querySelector('audio') as HTMLAudioElement;
+
+const scheduler = new TimelineScheduler({
+  audio: audioElement,
+  actions: [
+    { kind: 'type', timeMs: 1000, path: 'main.ts', text: 'console.log("Hello");' },
+    { kind: 'terminal_run', timeMs: 2000, command: 'npm install' },
+  ],
+  callbacks: {
+    onAction: (action, meta) => {
+      console.log(`Action fired at ${meta.actualTimeMs}ms (drift: ${meta.driftMs}ms)`);
+      executor.execute(action);
+    },
+    onComplete: () => {
+      console.log('Timeline complete');
+    },
+    onSeek: (timeMs) => {
+      console.log(`Seeked to ${timeMs}ms`);
+    },
+  },
+  toleranceMs: 16,
+});
+```
+
+## Methods
+
+### start()
+
+Starts the scheduler. Begins checking for actions to fire on each animation frame.
+
+```typescript
+scheduler.start();
+```
+
+### stop()
+
+Stops the scheduler. Cancels the animation frame loop without resetting the pointer.
+
+```typescript
+scheduler.stop();
+```
+
+### reset()
+
+Stops the scheduler and resets the action pointer to the beginning. Calls the `onReset` callback.
+
+```typescript
+scheduler.reset();
+```
+
+### seekTo(timeMs)
+
+Seeks the audio to a specific time and synchronizes the action pointer.
+
+<ParamField path="timeMs" type="number" required>
+  Time in milliseconds to seek to
+</ParamField>
+
+```typescript
+scheduler.seekTo(5000); // Seek to 5 seconds
+```
+
+### setActions(actions)
+
+Replaces the current action list with a new one. Actions are automatically sorted by `timeMs`.
+
+<ParamField path="actions" type="TimelineAction[]" required>
+  New array of timeline actions
+</ParamField>
+
+```typescript
+scheduler.setActions([
+  { kind: 'create_file', timeMs: 0, path: 'index.ts', content: '' },
+  { kind: 'type', timeMs: 1000, path: 'index.ts', text: 'export {}' },
+]);
+```
+
+### prime(timeMs)
+
+Synchronizes the action pointer as if the scheduler had played up to the given time. Actions before this time are considered already fired.
+
+<ParamField path="timeMs" type="number" required>
+  Time in milliseconds to prime to
+</ParamField>
+
+```typescript
+scheduler.prime(3000); // Mark actions up to 3s as fired
+```
+
+### primeAfter(timeMs)
+
+Similar to `prime()`, but uses inclusive comparison. Marks all actions at or before `timeMs` (within tolerance) as fired. Useful when rebuilding state up to an exact cue.
+
+<ParamField path="timeMs" type="number" required>
+  Time in milliseconds to prime after
+</ParamField>
+
+```typescript
+scheduler.primeAfter(3000); // Mark actions at exactly 3s and before as fired
+```
+
+### getActions()
+
+Returns the current sorted action list.
+
+```typescript
+const actions = scheduler.getActions();
+```
+
+### getPointer()
+
+Returns the current action pointer (index of the next unfired action).
+
+```typescript
+const pointer = scheduler.getPointer();
+console.log(`Next action index: ${pointer}`);
+```
+
+### dispose()
+
+Cleans up event listeners and stops the scheduler. Call this when the scheduler is no longer needed.
+
+```typescript
+scheduler.dispose();
+```
+
+## Type Definitions
+
+### TimelineAction
+
+Union type representing all possible timeline actions. Each action has a `kind` discriminator, `timeMs` timestamp, and optional `id` and `metadata`.
+
+```typescript
+type TimelineAction =
+  | CreateFileAction
+  | OpenFileAction
+  | TypeAction
+  | MoveCursorAction
+  | HighlightRangeAction
+  | TerminalRunAction
+  | TerminalOutputAction
+  | ClearTerminalAction;
+```
+
+See the [Timeline Actions](/features/ide-actions) reference for details on each action type.
+
+### FiredActionMeta
+
+Metadata provided when an action is fired.
+
+```typescript
+interface FiredActionMeta {
+  scheduledTimeMs: number;  // When the action was supposed to fire
+  actualTimeMs: number;     // When it actually fired
+  driftMs: number;          // Difference (actualTimeMs - scheduledTimeMs)
+}
+```
+
+## Usage in VSpeak
+
+In VSpeak's main app (web/src/App.tsx:285), the scheduler is created when timeline actions are loaded:
+
+```typescript
+const scheduler = new TimelineScheduler({
+  audio: audioEl as HTMLAudioElement,
+  actions: timelineActions,
+  callbacks: {
+    onAction: (action) => {
+      executorRef.current?.execute(action);
+    },
+    onComplete: () => {
+      setIsPlaying(false);
+      executorRef.current?.setPlaying(false);
+      executorRef.current?.flushTypingNow();
+    },
+    onSeek: (timeMs) => {
+      setCurrentTimeMs(timeMs);
+    },
+  },
+});
+```
+
+The scheduler automatically listens to the audio element's `seeked` and `ended` events to keep the action pointer synchronized.
+
+## Implementation Details
+
+- **Pull-based**: The scheduler polls `audio.currentTime` on each frame rather than using timers
+- **Tolerance**: Actions within `toleranceMs` of the current time are fired immediately to handle minor drift
+- **Frame rate**: Uses `requestAnimationFrame` (~60fps) for smooth synchronization
+- **Automatic sorting**: Actions are sorted by `timeMs` when set via constructor or `setActions()`
+- **Event listeners**: Automatically handles audio `seeked` and `ended` events to maintain pointer accuracy

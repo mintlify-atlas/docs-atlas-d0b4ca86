@@ -1,0 +1,316 @@
+---
+title: Navigating Chapters
+description: Master playback controls, chapter navigation, and timeline seeking to get the most from your walkthroughs
+---
+
+# Navigating Chapters
+
+VSpeak walkthroughs are divided into **chapters** - logical sections that let you jump to specific parts of the demonstration, just like YouTube videos.
+
+## Understanding the Walkthrough Player
+
+The Walkthrough Player appears at the top of the right panel when a walkthrough is loaded:
+
+```
+┌─────────────────────────────────────────┐
+│ Walkthrough Player              Ready   │
+│ [▶] [↺] [1x] [🔊 ━━━━━]               │
+├─────────────────────────────────────────┤
+│ ━━━━●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ │ <- Timeline
+│ Chapter 1  │ Chapter 2  │ Chapter 3    │ <- Chapter segments
+│ 0:42                            2:15    │ <- Time display
+└─────────────────────────────────────────┘
+```
+
+## Basic Playback Controls
+
+<Steps>
+  <Step title="Play / Pause">
+    Click the large **Play** button (▶) to start the walkthrough. It changes to **Pause** (⏸) while playing.
+    
+    The AI will narrate while code appears in the editor in perfect sync with the audio.
+  </Step>
+  
+  <Step title="Reset">
+    Click the **Reset** button (↺) to return to the beginning. This:
+    - Stops playback
+    - Resets audio to 0:00
+    - Clears all files from the editor
+    - Resets the IDE to its initial state
+  </Step>
+  
+  <Step title="Speed control">
+    Click the **1x** button to cycle through playback speeds:
+    - **0.5x** - Slow (great for beginners)
+    - **0.75x** - Slightly slow
+    - **1x** - Normal (default)
+    - **1.25x** - Faster
+    - **1.5x** - Fast
+    - **2x** - Very fast (for review)
+  </Step>
+  
+  <Step title="Volume">
+    Use the volume slider or click the speaker icon to mute/unmute.
+  </Step>
+</Steps>
+
+<Tip>
+  Try **0.75x speed** when learning new concepts - it gives you more time to read the code as it appears!
+</Tip>
+
+## Chapter Navigation
+
+### What Are Chapters?
+
+Chapters are logical sections of the walkthrough, like:
+
+- **Introduction** - Overview of what you'll build
+- **Setting Up Files** - Creating the project structure  
+- **Adding State** - Implementing React hooks
+- **Styling** - Adding CSS
+- **Wrap Up** - Final touches and summary
+
+Each chapter has:
+- A **title** (e.g., "Adding State")
+- A **description** (e.g., "Using useState for interactivity")
+- A **time range** (e.g., 0:45 - 1:23)
+
+### Visual Chapter Indicators
+
+**On the timeline bar:**
+- Chapters appear as colored segments
+- **Active chapter** is highlighted
+- **Past chapters** (already played) are dimmed
+- Vertical dividers separate chapters
+
+**Current chapter label:**
+Above the timeline, you'll see the name of the chapter you're currently watching.
+
+### How to Jump Between Chapters
+
+<Tabs>
+  <Tab title="Method 1: Chapter List">
+    Below the timeline, expand the **Chapters** section to see all chapters:
+    
+    - ✓ **Checkmark** = completed chapter
+    - ● **Dot** = current chapter
+    - ○ **Circle** = upcoming chapter
+    
+    Click any chapter to jump to its start time.
+  </Tab>
+  
+  <Tab title="Method 2: Timeline Hover">
+    Hover your mouse over the timeline bar to see a tooltip showing:
+    - Chapter title
+    - Chapter description  
+    - Time range
+    
+    Click anywhere on the timeline to seek to that position.
+  </Tab>
+  
+  <Tab title="Method 3: Click Timeline">
+    Click directly on a chapter segment in the timeline to jump to that chapter's start.
+  </Tab>
+</Tabs>
+
+## Seeking (Jumping to Specific Times)
+
+### Click to Seek
+
+Click anywhere on the timeline bar to jump to that moment:
+
+1. **Audio** jumps to the new time
+2. **IDE state** updates to show correct files and code at that point
+3. **Playback** continues from the new position
+
+<Note>
+  When you seek, VSpeak automatically rebuilds the IDE state by replaying all actions up to that point **instantly**. This ensures you always see the correct code.
+</Note>
+
+### Drag to Scrub
+
+You can also click and drag on the timeline to scrub through the walkthrough:
+
+1. Click and hold on the timeline
+2. Drag left/right to move through time
+3. Release to start playback from that position
+
+## What Happens When You Seek?
+
+Understanding this helps you navigate confidently:
+
+<Steps>
+  <Step title="VSpeak pauses execution">
+    Any currently playing audio or typing animation stops.
+  </Step>
+  
+  <Step title="IDE resets to initial state">
+    All files are cleared, cursor position reset.
+  </Step>
+  
+  <Step title="Actions are replayed instantly">
+    VSpeak replays **all actions** from the beginning up to your seek point - but instantly (no animation).
+    
+    If you seek to 1:30, it will:
+    - Create all files that should exist at 1:30
+    - Type all code that should be written at 1:30
+    - Run all terminal commands that should have executed
+  </Step>
+  
+  <Step title="Playback resumes">
+    Audio and animations continue from the new position.
+  </Step>
+</Steps>
+
+## Pause and Explore
+
+One of VSpeak's best features: **you can pause and interact with the code**!
+
+<Steps>
+  <Step title="Pause the walkthrough">
+    Click the Pause button or press the spacebar.
+  </Step>
+  
+  <Step title="Explore the editor">
+    - Switch between files in the Explorer
+    - Read through the code
+    - Scroll up and down
+    - Check the terminal output
+  </Step>
+  
+  <Step title="Copy code snippets">
+    Select any code in the editor and copy it (Ctrl+C / Cmd+C) to use in your own projects.
+  </Step>
+  
+  <Step title="Resume when ready">
+    Click Play to continue from where you left off.
+  </Step>
+</Steps>
+
+<Tip>
+  **Best practice:** Pause at the end of each chapter to review what was built before moving on.
+</Tip>
+
+## Reading the Timeline
+
+### Progress Indicators
+
+| Visual Element | Meaning |
+|----------------|----------|
+| **Blue fill** | Portion of walkthrough you've watched |
+| **Gray segments** | Upcoming chapters |
+| **Dimmed segments** | Completed chapters |
+| **Playhead (circle)** | Current position in the audio |
+| **Vertical lines** | Chapter boundaries |
+
+### Time Display
+
+At the bottom of the timeline:
+- **Left number** (e.g., `0:42`) = Current time
+- **Right number** (e.g., `2:15`) = Total duration
+
+## Advanced Navigation Tips
+
+<AccordionGroup>
+  <Accordion title="Replay a specific chapter">
+    1. Click on the chapter in the chapter list
+    2. Click Play
+    3. The walkthrough will play from that chapter's start
+    4. You can pause before the next chapter begins, or let it continue
+  </Accordion>
+  
+  <Accordion title="Skip the introduction">
+    Most walkthroughs start with an "Introduction" chapter explaining what you'll build.
+    
+    If you want to jump straight to coding:
+    1. Open the chapter list
+    2. Click the second chapter (usually "Setting Up" or similar)
+  </Accordion>
+  
+  <Accordion title="Review at 2x speed">
+    If you've already watched a walkthrough and want to review:
+    1. Set speed to **2x**
+    2. Click Play
+    3. The code will type faster and narration will play faster
+    4. Slow down or pause at any section you want to review
+  </Accordion>
+  
+  <Accordion title="Watch in segments">
+    For longer walkthroughs:
+    1. Watch one chapter at a time
+    2. Pause and take notes
+    3. Click the next chapter when ready
+    4. This helps with retention!
+  </Accordion>
+</AccordionGroup>
+
+## Keyboard Shortcuts
+
+While the walkthrough player is active:
+
+| Key | Action |
+|-----|--------|
+| **Space** | Play / Pause |
+| **←** | Rewind 5 seconds |
+| **→** | Forward 5 seconds |
+| **↑** | Increase volume |
+| **↓** | Decrease volume |
+| **0** | Jump to beginning |
+
+<Note>
+  Keyboard shortcuts currently work when the player has focus. Click anywhere in the player area to focus it.
+</Note>
+
+## Troubleshooting Navigation
+
+<AccordionGroup>
+  <Accordion title="Seeking feels laggy">
+    When you seek to a new position, VSpeak needs to rebuild the IDE state. For walkthroughs with many files or complex actions, this can take 1-2 seconds.
+    
+    This is normal - wait for the IDE to update before clicking Play.
+  </Accordion>
+  
+  <Accordion title="Chapter markers not showing">
+    If you don't see chapter segments on the timeline:
+    - The walkthrough may not have chapters (older demos)
+    - Try refreshing the page
+    - Check that the walkthrough loaded successfully
+  </Accordion>
+  
+  <Accordion title="Audio and code out of sync">
+    If code appears before/after the AI mentions it:
+    1. Pause the walkthrough
+    2. Click Reset
+    3. Click Play again
+    
+    This re-syncs everything from the beginning.
+  </Accordion>
+  
+  <Accordion title="Can't click on timeline">
+    Make sure:
+    - A walkthrough is loaded (check that the player shows "Ready")
+    - Audio has finished loading (you should see the total duration)
+    - You're clicking on the timeline bar itself (the gray/blue bar)
+  </Accordion>
+</AccordionGroup>
+
+## Chapter List Reference
+
+The chapter list shows all chapters in the walkthrough:
+
+```
+Chapters                                    3
+───────────────────────────────────────────
+✓ Introduction                          0:00
+● Setting Up Files                      0:32  <- Currently playing
+○ Adding Functionality                  1:15
+○ Testing                               1:48
+```
+
+- Click any chapter to jump to it
+- The list shows your progress at a glance
+- Completed chapters have checkmarks
+
+<Tip>
+  The chapter list is perfect for **skipping around** when you're reviewing a walkthrough you've already watched!
+</Tip>

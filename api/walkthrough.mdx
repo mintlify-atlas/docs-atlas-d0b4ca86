@@ -1,0 +1,412 @@
+---
+title: Walkthrough API
+description: Generate and manage guided audio-visual coding tutorials
+---
+
+The Walkthrough API allows you to create synchronized audio tutorials with IDE actions, creating an immersive learning experience.
+
+## Generate Walkthrough
+
+<api method="POST" endpoint="/api/walkthrough/generate">
+  Generate a new walkthrough from a text prompt. This runs the complete pipeline: script generation, TTS, action synchronization, and chapter creation.
+</api>
+
+<Warning>
+  Walkthrough generation can take 10-60 seconds depending on the complexity of the tutorial.
+</Warning>
+
+### Request Body
+
+<ParamField body="prompt" type="string" required>
+  The topic or concept you want the walkthrough to teach. Be specific for best results.
+  
+  **Examples:**
+  - "How to build a REST API with FastAPI"
+  - "Creating a React component with hooks"
+  - "Setting up PostgreSQL with SQLAlchemy"
+</ParamField>
+
+<ParamField body="session_id" type="string">
+  Optional session ID (currently not used, reserved for future features).
+</ParamField>
+
+### Request Example
+
+```json
+{
+  "prompt": "How to build a REST API with FastAPI"
+}
+```
+
+### Response
+
+<ResponseField name="walkthrough" type="WalkthroughSession">
+  The complete walkthrough session object.
+  
+  <Expandable title="WalkthroughSession properties">
+    <ResponseField name="id" type="string">
+      Unique walkthrough identifier (UUID).
+    </ResponseField>
+    
+    <ResponseField name="title" type="string">
+      Walkthrough title (first 50 chars of prompt).
+    </ResponseField>
+    
+    <ResponseField name="prompt" type="string">
+      Original prompt used to generate the walkthrough.
+    </ResponseField>
+    
+    <ResponseField name="created_at" type="datetime">
+      Creation timestamp (ISO 8601).
+    </ResponseField>
+    
+    <ResponseField name="audio_path" type="string">
+      File path to the generated audio WAV file.
+    </ResponseField>
+    
+    <ResponseField name="actions" type="array">
+      Array of SyncedAction objects with timestamps.
+      
+      <Expandable title="SyncedAction properties">
+        <ResponseField name="type" type="string">
+          Action type: `create_file`, `type_code`, `switch_tab`, `delete`, `move_cursor`, `scroll`, `highlight`, `terminal_command`, `run_code`, or `show_output`.
+        </ResponseField>
+        
+        <ResponseField name="timestamp_ms" type="integer">
+          Exact millisecond timestamp when this action should execute.
+        </ResponseField>
+        
+        <ResponseField name="trigger_word" type="string">
+          The word in the narration that triggers this action.
+        </ResponseField>
+        
+        <ResponseField name="params" type="object">
+          Action-specific parameters (e.g., file path, code content, command).
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="chapters" type="array">
+      Array of ChapterWithSnapshot objects for timeline navigation.
+      
+      <Expandable title="ChapterWithSnapshot properties">
+        <ResponseField name="id" type="string">
+          Chapter identifier (8-char UUID prefix).
+        </ResponseField>
+        
+        <ResponseField name="title" type="string">
+          Chapter title.
+        </ResponseField>
+        
+        <ResponseField name="description" type="string">
+          Optional chapter description.
+        </ResponseField>
+        
+        <ResponseField name="start_ms" type="integer">
+          Chapter start time in milliseconds.
+        </ResponseField>
+        
+        <ResponseField name="end_ms" type="integer">
+          Chapter end time in milliseconds.
+        </ResponseField>
+        
+        <ResponseField name="snapshot" type="IDEStateSnapshot">
+          Optional IDE state snapshot for seeking.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="duration_ms" type="integer">
+      Total walkthrough duration in milliseconds.
+    </ResponseField>
+    
+    <ResponseField name="script" type="GeneratedScript">
+      The complete script with chunks and vocal directions.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="audio_url" type="string">
+  URL path to stream the audio file: `/api/walkthrough/{walkthrough_id}/audio`
+</ResponseField>
+
+### Response Example
+
+```json
+{
+  "walkthrough": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "title": "How to build a REST API with FastAPI",
+    "prompt": "How to build a REST API with FastAPI",
+    "created_at": "2026-03-03T15:00:00Z",
+    "audio_path": "sessions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/final_audio.wav",
+    "actions": [
+      {
+        "type": "create_file",
+        "timestamp_ms": 2500,
+        "trigger_word": "create",
+        "params": {
+          "path": "main.py",
+          "content": "from fastapi import FastAPI\n\napp = FastAPI()"
+        }
+      }
+    ],
+    "chapters": [
+      {
+        "id": "a1b2c3d4",
+        "title": "Introduction",
+        "description": "Overview of FastAPI",
+        "start_ms": 0,
+        "end_ms": 5000,
+        "snapshot": null
+      }
+    ],
+    "duration_ms": 45000,
+    "script": {
+      "chunks": [
+        {
+          "text": "[enthusiastic] Let's build a REST API with FastAPI!",
+          "actions": []
+        }
+      ],
+      "chapters": []
+    }
+  },
+  "audio_url": "/api/walkthrough/a1b2c3d4-e5f6-7890-abcd-ef1234567890/audio"
+}
+```
+
+### cURL Example
+
+```bash
+curl -X POST http://localhost:8000/api/walkthrough/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "How to build a REST API with FastAPI"
+  }'
+```
+
+---
+
+## Get Walkthrough
+
+<api method="GET" endpoint="/api/walkthrough/{walkthrough_id}">
+  Retrieve a walkthrough by ID. Loads from memory or disk if available.
+</api>
+
+### Path Parameters
+
+<ParamField path="walkthrough_id" type="string" required>
+  The walkthrough ID (UUID).
+</ParamField>
+
+### Response
+
+Returns a complete `WalkthroughSession` object (see schema above).
+
+### Error Responses
+
+<ResponseField name="404" type="error">
+  Walkthrough not found in memory or on disk.
+  
+  ```json
+  {
+    "detail": "Walkthrough not found"
+  }
+  ```
+</ResponseField>
+
+### cURL Example
+
+```bash
+curl http://localhost:8000/api/walkthrough/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+```
+
+---
+
+## Get Walkthrough Audio
+
+<api method="GET" endpoint="/api/walkthrough/{walkthrough_id}/audio">
+  Stream the walkthrough audio file (WAV format).
+</api>
+
+### Path Parameters
+
+<ParamField path="walkthrough_id" type="string" required>
+  The walkthrough ID.
+</ParamField>
+
+### Response
+
+Returns a `FileResponse` with:
+
+- **Content-Type**: `audio/wav`
+- **Filename**: `walkthrough_{walkthrough_id}.wav`
+
+### Error Responses
+
+<ResponseField name="404" type="error">
+  Walkthrough not found or audio file missing.
+  
+  ```json
+  {
+    "detail": "Audio file not found"
+  }
+  ```
+</ResponseField>
+
+### cURL Example
+
+```bash
+curl http://localhost:8000/api/walkthrough/a1b2c3d4-e5f6-7890-abcd-ef1234567890/audio \
+  --output walkthrough.wav
+```
+
+### HTML Audio Player
+
+```html
+<audio controls>
+  <source src="http://localhost:8000/api/walkthrough/a1b2c3d4-e5f6-7890-abcd-ef1234567890/audio" type="audio/wav">
+</audio>
+```
+
+---
+
+## List Walkthroughs
+
+<api method="GET" endpoint="/api/walkthroughs">
+  Get all saved walkthroughs with basic metadata, sorted by creation date (newest first).
+</api>
+
+### Response
+
+Returns an array of walkthrough summaries:
+
+<ResponseField name="id" type="string">
+  Walkthrough identifier.
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  Walkthrough title.
+</ResponseField>
+
+<ResponseField name="prompt" type="string">
+  Original prompt.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 creation timestamp.
+</ResponseField>
+
+<ResponseField name="duration_ms" type="integer">
+  Total duration in milliseconds.
+</ResponseField>
+
+### Response Example
+
+```json
+[
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "title": "How to build a REST API with FastAPI",
+    "prompt": "How to build a REST API with FastAPI",
+    "created_at": "2026-03-03T15:00:00Z",
+    "duration_ms": 45000
+  }
+]
+```
+
+### cURL Example
+
+```bash
+curl http://localhost:8000/api/walkthroughs
+```
+
+---
+
+## Delete Walkthrough
+
+<api method="DELETE" endpoint="/api/walkthrough/{walkthrough_id}">
+  Delete a walkthrough and all associated files (audio, metadata, etc.).
+</api>
+
+### Path Parameters
+
+<ParamField path="walkthrough_id" type="string" required>
+  The walkthrough ID to delete.
+</ParamField>
+
+### Response
+
+```json
+{
+  "success": true
+}
+```
+
+### cURL Example
+
+```bash
+curl -X DELETE http://localhost:8000/api/walkthrough/a1b2c3d4-e5f6-7890-abcd-ef1234567890
+```
+
+---
+
+## Pipeline Architecture
+
+When you generate a walkthrough, VSpeak runs through these stages:
+
+<Steps>
+  <Step title="Script Generation">
+    LLM generates a structured script with chunks, actions, and chapters.
+  </Step>
+  
+  <Step title="Text-to-Speech">
+    Each chunk is converted to audio using Cartesia TTS with vocal directions.
+  </Step>
+  
+  <Step title="Audio Stitching">
+    Individual audio chunks are stitched into a single WAV file.
+  </Step>
+  
+  <Step title="Speech-to-Text">
+    Deepgram STT transcribes the audio with word-level timestamps.
+  </Step>
+  
+  <Step title="Action Synchronization">
+    Actions are matched to trigger words and assigned precise timestamps.
+  </Step>
+  
+  <Step title="Chapter Timing">
+    Chapter boundaries are calculated based on chunk positions.
+  </Step>
+</Steps>
+
+## Storage
+
+Walkthroughs are persisted to disk in the `sessions/` directory:
+
+```
+sessions/
+└── {walkthrough_id}/
+    ├── walkthrough.json    # Full metadata
+    ├── final_audio.wav     # Generated audio
+    └── actions.json        # Synced actions
+```
+
+## Action Types
+
+Supported IDE action types:
+
+| Action Type | Description | Example Params |
+|------------|-------------|----------------|
+| `create_file` | Create a new file | `{"path": "main.py", "content": "..."}` |
+| `type_code` | Type code into active file | `{"code": "print('hello')"}` |
+| `switch_tab` | Switch to a different file | `{"path": "config.py"}` |
+| `delete` | Delete text | `{"range": {"start": 0, "end": 10}}` |
+| `move_cursor` | Move cursor position | `{"line": 5, "column": 12}` |
+| `scroll` | Scroll the editor | `{"direction": "down", "lines": 3}` |
+| `highlight` | Highlight code | `{"start": 0, "end": 20}` |
+| `terminal_command` | Execute a command | `{"command": "npm install"}` |
+| `run_code` | Run the current file | `{}` |
+| `show_output` | Show terminal output | `{"output": "Success!"}` |

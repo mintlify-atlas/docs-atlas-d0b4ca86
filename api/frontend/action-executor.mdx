@@ -1,0 +1,273 @@
+---
+title: ActionExecutor
+description: Executes timeline actions on the Monaco editor and terminal
+---
+
+## Overview
+
+The `ActionExecutor` is responsible for applying timeline actions to VSpeak's code editor and terminal. It manages a virtual file system, Monaco editor integration, and terminal controller to execute actions like file creation, typing, cursor movement, highlighting, and terminal commands.
+
+The executor supports both immediate execution (during playback) and batch mode (for seeking/rebuilding state quickly).
+
+## Constructor
+
+```typescript
+new ActionExecutor(options?: ActionExecutorOptions)
+```
+
+<ParamField path="options" type="ActionExecutorOptions">
+  Optional configuration object
+
+  <ParamField path="options.onFileOpened" type="(path: string | null) => void">
+    Called when a file is opened in the editor
+  </ParamField>
+
+  <ParamField path="options.onFileCreated" type="(path: string) => void">
+    Called when a new file is created
+  </ParamField>
+</ParamField>
+
+### Example
+
+```typescript
+const executor = new ActionExecutor({
+  onFileOpened: (path) => {
+    console.log(`Opened: ${path}`);
+    setActiveFile(path);
+  },
+  onFileCreated: (path) => {
+    console.log(`Created: ${path}`);
+    setFiles((prev) => [...prev, path].sort());
+  },
+});
+```
+
+## Methods
+
+### attachEditor(editor, monacoInstance)
+
+Attaches a Monaco editor instance to the executor. Required before executing editor-related actions.
+
+<ParamField path="editor" type="monaco.editor.IStandaloneCodeEditor" required>
+  Monaco editor instance
+</ParamField>
+
+<ParamField path="monacoInstance" type="typeof monaco" required>
+  Monaco module instance for type construction
+</ParamField>
+
+```typescript
+import * as monaco from 'monaco-editor';
+
+const editor = monaco.editor.create(containerElement, {
+  theme: 'vs-dark',
+  automaticLayout: true,
+});
+
+executor.attachEditor(editor, monaco);
+```
+
+### attachTerminal(terminal)
+
+Attaches a terminal controller for executing terminal-related actions.
+
+<ParamField path="terminal" type="TerminalController | null" required>
+  Terminal controller instance (or null to detach)
+</ParamField>
+
+```typescript
+const terminal = new TerminalController();
+terminal.mount(terminalContainer);
+executor.attachTerminal(terminal);
+```
+
+### execute(action)
+
+Executes a single timeline action. Dispatches to the appropriate handler based on `action.kind`.
+
+<ParamField path="action" type="TimelineAction" required>
+  The timeline action to execute
+</ParamField>
+
+```typescript
+executor.execute({
+  kind: 'type',
+  timeMs: 1000,
+  path: 'main.ts',
+  text: 'console.log("Hello");',
+});
+```
+
+**Supported action kinds:**
+- `create_file` - Creates a new file in the virtual filesystem
+- `open_file` - Opens an existing file in the editor
+- `type` - Types text at the cursor position (supports animated typing)
+- `move_cursor` - Moves cursor to a specific line/column
+- `highlight_range` - Highlights a code range with optional color and duration
+- `terminal_run` - Displays a command in the terminal
+- `terminal_output` - Writes output to the terminal
+- `clear_terminal` - Clears terminal content
+
+### reset()
+
+Resets the executor state: clears the virtual filesystem, closes all files, clears the terminal, and cancels any ongoing animations.
+
+```typescript
+executor.reset();
+```
+
+### dispose()
+
+Cleans up all resources. Calls `reset()` and detaches editor/terminal references.
+
+```typescript
+executor.dispose();
+```
+
+### focusFile(path)
+
+Ensures a file is open and scrolls to the end of the file.
+
+<ParamField path="path" type="string" required>
+  Path to the file to focus
+</ParamField>
+
+```typescript
+executor.focusFile('src/index.ts');
+```
+
+### beginBatch()
+
+Enters batch mode. In batch mode, actions are applied immediately without animations for fast seeking/rebuilding.
+
+```typescript
+executor.beginBatch();
+// Execute multiple actions quickly
+actions.forEach(action => executor.execute(action));
+executor.endBatch();
+```
+
+### endBatch()
+
+Exits batch mode and returns to normal (animated) execution.
+
+```typescript
+executor.endBatch();
+```
+
+### setPlaying(playing)
+
+Sets the playing state. When paused, animated typing stops advancing (but maintains its state).
+
+<ParamField path="playing" type="boolean" required>
+  Whether playback is active
+</ParamField>
+
+```typescript
+executor.setPlaying(true);  // Resume typing animations
+executor.setPlaying(false); // Pause typing animations
+```
+
+### flushTypingNow()
+
+Immediately applies any remaining characters from an active typing animation. Used when audio completes to avoid leaving half-typed content.
+
+```typescript
+// When audio ends
+executor.flushTypingNow();
+```
+
+## Type Actions and Animated Typing
+
+The executor supports animated character-by-character typing via the `charactersPerSecond` or `delayMs` properties on `TypeAction`:
+
+```typescript
+executor.execute({
+  kind: 'type',
+  timeMs: 1000,
+  path: 'main.ts',
+  text: 'const greeting = "Hello, world!";',
+  charactersPerSecond: 20, // Type at 20 chars/sec
+});
+
+// Or use delayMs for total duration
+executor.execute({
+  kind: 'type',
+  timeMs: 2000,
+  path: 'main.ts',
+  text: 'console.log(greeting);',
+  delayMs: 1500, // Complete in 1.5 seconds
+});
+```
+
+**Typing behavior:**
+- **Immediate mode** (default): Text appears instantly
+- **Animated mode**: Characters appear progressively at ~60fps
+- **Batch mode**: Always immediate, ignoring animation settings
+- **Paused**: Typing animation freezes but maintains state
+
+## Highlight Actions
+
+Highlights can be applied with custom colors and durations:
+
+```typescript
+executor.execute({
+  kind: 'highlight_range',
+  timeMs: 3000,
+  path: 'main.ts',
+  range: {
+    startLine: 1,
+    startColumn: 1,
+    endLine: 1,
+    endColumn: 20,
+  },
+  color: 'blue',      // Optional: 'blue' | 'green' | 'yellow' | 'pink' | 'red' | 'cyan'
+  durationMs: 2000,   // Optional: auto-clear after 2 seconds
+});
+```
+
+## Usage in VSpeak
+
+In VSpeak's main app (web/src/App.tsx:177), the executor is created with file management callbacks:
+
+```typescript
+const executor = new ActionExecutor({
+  onFileOpened: (path) => setActiveFile(path),
+  onFileCreated: (path) =>
+    setFiles((prev) => {
+      if (prev.includes(path)) return prev;
+      return [...prev, path].sort((a, b) => a.localeCompare(b));
+    }),
+});
+```
+
+The executor is connected to both the Monaco editor and terminal controller, then controlled by the TimelineScheduler:
+
+```typescript
+// In scheduler callbacks
+onAction: (action) => {
+  executorRef.current?.execute(action);
+},
+onComplete: () => {
+  executorRef.current?.flushTypingNow();
+},
+```
+
+## Virtual File System
+
+The executor maintains an internal virtual file system that stores Monaco text models. Files exist only in memory and are managed through `create_file` and `open_file` actions.
+
+**Key behaviors:**
+- Files are created with `create_file` action
+- Opening a non-existent file throws an error
+- Only one file can be open in the editor at a time
+- File state persists across seeks (unless `reset()` is called)
+- All models share the same Monaco instance
+
+## Implementation Details
+
+- **Animation frame rate**: Typing runs at ~60fps (16ms intervals)
+- **Chunk optimization**: Multiple characters typed per frame for high CPS rates
+- **Decoration management**: Highlights use Monaco decorations with auto-cleanup
+- **Position tracking**: Cursor position maintained across edits using Monaco's `IPosition`
+- **Terminal integration**: Terminal commands prefixed with `$` for shell appearance

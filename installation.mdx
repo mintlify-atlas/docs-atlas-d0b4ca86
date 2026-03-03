@@ -1,0 +1,546 @@
+---
+title: Installation
+description: Complete installation guide with prerequisites, dependencies, and environment configuration for VSpeak
+---
+
+# Installation Guide
+
+This guide covers everything you need to install and configure VSpeak for local development or production deployment.
+
+## System Requirements
+
+<CardGroup cols={2}>
+  <Card title="Python" icon="python">
+    **Version 3.11 or higher**
+    
+    Required for the FastAPI backend and pipeline
+  </Card>
+  <Card title="Node.js" icon="node">
+    **Version 18 or higher**
+    
+    Required for the React frontend build
+  </Card>
+</CardGroup>
+
+### Verify Your Installation
+
+```bash
+python --version  # Should show 3.11+
+node --version    # Should show 18+
+npm --version     # Should show 9+
+```
+
+<Warning>
+  VSpeak requires **Python 3.11+** due to modern type hints and async features. Python 3.10 and below are not supported.
+</Warning>
+
+## API Keys & Providers
+
+VSpeak is **fully modular** — you can mix and match providers based on your preferences and budget.
+
+### Required Providers
+
+You need **at least one provider from each category**:
+
+#### 1. LLM Provider (Script Generation)
+
+Choose one:
+
+<Tabs>
+  <Tab title="Cerebras (Default)">
+    **Cerebras Cloud SDK** — Ultra-fast inference with GLM-4.7
+
+    - Sign up: [https://cerebras.ai](https://cerebras.ai)
+    - Get API key from dashboard
+    - Set in `.env`: `CEREBRAS_API_KEY=your_key`
+
+    **Why Cerebras?** Extremely fast generation (~2-3 seconds for full scripts) with reasoning mode support.
+  </Tab>
+  <Tab title="OpenAI">
+    **OpenAI GPT Models** — GPT-4, GPT-3.5-turbo, etc.
+
+    - Sign up: [https://platform.openai.com](https://platform.openai.com)
+    - Create API key
+    - Set in `.env`: `OPENAI_API_KEY=your_key`
+    - Update `config.py` to use OpenAI client
+  </Tab>
+  <Tab title="Anthropic">
+    **Anthropic Claude** — Claude 3 Opus, Sonnet, Haiku
+
+    - Sign up: [https://console.anthropic.com](https://console.anthropic.com)
+    - Generate API key
+    - Set in `.env`: `ANTHROPIC_API_KEY=your_key`
+    - Update `config.py` to use Anthropic client
+  </Tab>
+  <Tab title="Google Gemini">
+    **Google Gemini** — Gemini Pro, Gemini Ultra
+
+    - Get key: [https://ai.google.dev](https://ai.google.dev)
+    - Set in `.env`: `GEMINI_API_KEY=your_key`
+    - Update `config.py` to use Gemini client
+  </Tab>
+</Tabs>
+
+#### 2. STT Provider (Timestamp Extraction)
+
+Choose one:
+
+<Tabs>
+  <Tab title="Groq Whisper (Default)">
+    **Groq Whisper** — Ultra-fast Whisper inference
+
+    - Sign up: [https://console.groq.com](https://console.groq.com)
+    - Create API key
+    - Set in `.env`: `GROQ_API_KEY=your_key`
+
+    **Model:** `whisper-large-v3-turbo`
+
+    **Why Groq?** Fastest Whisper inference available, perfect for low-latency pipelines.
+  </Tab>
+  <Tab title="OpenAI Whisper">
+    **OpenAI Whisper API** — Official Whisper endpoint
+
+    - Uses same API key as OpenAI LLM
+    - Set in `.env`: `OPENAI_API_KEY=your_key`
+    - Update `config.py` to use OpenAI Whisper
+  </Tab>
+  <Tab title="Local Whisper">
+    **Whisper.cpp or faster-whisper** — Run locally
+
+    - No API key needed
+    - Requires GPU for real-time performance
+    - Install: `pip install faster-whisper`
+    - Update timestamp extractor to use local model
+  </Tab>
+</Tabs>
+
+#### 3. TTS Provider (Audio Synthesis)
+
+Choose one:
+
+<Tabs>
+  <Tab title="Gemini TTS (Default)">
+    **Gemini 2.5 Flash Preview TTS** — High-quality, long-form synthesis
+
+    - Uses same API key as Gemini LLM
+    - Set in `.env`: `GEMINI_API_KEY=your_key`
+    - Supports full scripts in one shot (no chunking needed)
+
+    **Available voices:** Kore, Zephyr, Puck, Charon, Fenrir, Aoede
+
+    Configure in `backend/config.py`:
+    ```python
+    TTS_PROVIDER = "gemini"
+    GEMINI_TTS_VOICE = "Kore"  # Change to your preferred voice
+    ```
+  </Tab>
+  <Tab title="Orpheus TTS">
+    **Orpheus v1 English** — Expressive TTS via Groq
+
+    - Uses Groq API (same as STT)
+    - Set in `.env`: `GROQ_API_KEY=your_key`
+    - Supports vocal directions: `[cheerful]`, `[thoughtful]`, `[excited]`
+
+    **Available voices:** austin, coral, ember, sage
+
+    Configure in `backend/config.py`:
+    ```python
+    TTS_PROVIDER = "orpheus"
+    ORPHEUS_TTS_VOICE = "austin"
+    ```
+
+    <Note>
+      Orpheus has character limits per request, so VSpeak automatically chunks and stitches audio seamlessly.
+    </Note>
+  </Tab>
+  <Tab title="ElevenLabs">
+    **ElevenLabs** — Premium voice cloning and synthesis
+
+    - Sign up: [https://elevenlabs.io](https://elevenlabs.io)
+    - Create API key
+    - Set in `.env`: `ELEVENLABS_API_KEY=your_key`
+    - Implement ElevenLabs audio generator (similar to Gemini/Orpheus)
+  </Tab>
+  <Tab title="OpenAI TTS">
+    **OpenAI Text-to-Speech** — Natural voices (alloy, echo, fable, onyx, nova, shimmer)
+
+    - Uses same API key as OpenAI LLM
+    - Set in `.env`: `OPENAI_API_KEY=your_key`
+    - Implement OpenAI TTS audio generator
+  </Tab>
+</Tabs>
+
+## Step 1: Clone the Repository
+
+```bash
+git clone <your-repo-url>
+cd VSpeak
+```
+
+## Step 2: Backend Setup
+
+### Install Python Dependencies
+
+```bash
+cd backend
+pip install -r requirements.txt
+```
+
+<Accordion title="View requirements.txt contents">
+  ```txt requirements.txt
+  cerebras-cloud-sdk
+  groq
+  pydantic
+  python-dotenv
+  google-genai
+  fastapi
+  uvicorn[standard]
+  websockets
+  python-multipart
+  ```
+</Accordion>
+
+### Create Environment File
+
+Create a `.env` file in the `backend/` directory:
+
+```bash backend/.env
+# ============================================
+# LLM Provider (choose one)
+# ============================================
+CEREBRAS_API_KEY=your_cerebras_key_here
+# OPENAI_API_KEY=your_openai_key_here
+# ANTHROPIC_API_KEY=your_anthropic_key_here
+# GEMINI_API_KEY=your_gemini_key_here
+
+# ============================================
+# STT Provider (Whisper)
+# ============================================
+GROQ_API_KEY=your_groq_key_here
+# OPENAI_API_KEY=your_openai_key_here  # Can reuse for Whisper
+
+# ============================================
+# TTS Provider (choose one)
+# ============================================
+GEMINI_API_KEY=your_gemini_key_here
+# GROQ_API_KEY=your_groq_key_here  # Can reuse for Orpheus TTS
+# ELEVENLABS_API_KEY=your_elevenlabs_key_here
+# OPENAI_API_KEY=your_openai_key_here  # Can reuse for OpenAI TTS
+
+# ============================================
+# Optional: Workspace Configuration
+# ============================================
+# WORKSPACE_ROOT=/path/to/your/workspace  # Default: ./workspace
+```
+
+<Note>
+  **Reusing Keys:** If you're using multiple services from the same provider (e.g., OpenAI for LLM + TTS + STT), you only need one API key.
+</Note>
+
+### Configure Providers
+
+Edit `backend/config.py` to customize your setup:
+
+```python backend/config.py
+# ============================================
+# Provider Selection
+# ============================================
+
+# LLM Configuration
+CEREBRAS_MODEL = "zai-glm-4.7"
+DISABLE_REASONING = True  # Faster responses
+
+# TTS Provider: "orpheus" or "gemini"
+TTS_PROVIDER = "gemini"  # Change to "orpheus" if preferred
+
+# Gemini TTS Configuration
+GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts"
+GEMINI_TTS_VOICE = "Kore"  # Options: Zephyr, Puck, Charon, Kore, Fenrir, Aoede
+
+# Orpheus TTS Configuration
+ORPHEUS_TTS_MODEL = "canopylabs/orpheus-v1-english"
+ORPHEUS_TTS_VOICE = "austin"  # Options: austin, coral, ember, sage
+
+# Whisper STT Configuration
+STT_MODEL = "whisper-large-v3-turbo"
+
+# ============================================
+# Pipeline Settings
+# ============================================
+
+# Script Generation
+MIN_CHUNK_LENGTH = 100
+MAX_CHUNK_LENGTH = 150
+TARGET_SCRIPT_DURATION_SECONDS = 120  # ~2 minutes
+
+# Audio Processing
+CROSSFADE_DURATION_MS = 50
+SILENCE_PADDING_MS = 150
+SAMPLE_RATE = 24000
+```
+
+<Accordion title="Understanding chunking settings">
+  **Why chunking?** Some TTS models (like Orpheus) have character limits per request. VSpeak automatically:
+  
+  1. Splits long scripts into chunks (100-150 characters)
+  2. Generates audio for each chunk
+  3. Stitches them with crossfades for seamless playback
+
+  **Gemini TTS** supports long-form synthesis, so no chunking is needed (single-shot generation).
+</Accordion>
+
+### Verify Backend Installation
+
+```bash
+cd backend
+python -c "import fastapi, pydantic, uvicorn; print('Backend dependencies OK')"
+```
+
+## Step 3: Frontend Setup
+
+### Install Node Dependencies
+
+```bash
+cd ../web
+npm install
+```
+
+<Accordion title="View package.json dependencies">
+  ```json package.json
+  {
+    "dependencies": {
+      "@monaco-editor/react": "^4.7.0",
+      "@xterm/addon-fit": "^0.10.0",
+      "@xterm/xterm": "^5.5.0",
+      "monaco-editor": "^0.53.0",
+      "react": "^19.1.1",
+      "react-dom": "^19.1.1"
+    },
+    "devDependencies": {
+      "@vitejs/plugin-react": "^5.0.3",
+      "autoprefixer": "^10.4.21",
+      "tailwindcss": "^3.4.14",
+      "typescript": "~5.8.3",
+      "vite": "^7.1.7"
+    }
+  }
+  ```
+</Accordion>
+
+### Verify Frontend Installation
+
+```bash
+cd web
+npm run build
+```
+
+If the build succeeds, your frontend is ready!
+
+## Step 4: Directory Structure
+
+After installation, your directory should look like this:
+
+```
+VSpeak/
+├── backend/
+│   ├── .env                      # Your API keys (DO NOT COMMIT)
+│   ├── config.py                 # Provider configuration
+│   ├── server.py                 # FastAPI server
+│   ├── main.py                   # Pipeline entry point
+│   ├── requirements.txt          # Python dependencies
+│   ├── clients/                  # LLM/TTS/STT clients
+│   │   ├── cerebras_client.py
+│   │   └── ...
+│   ├── pipeline/                 # Generation pipeline
+│   │   ├── script_generator.py
+│   │   ├── audio_generator.py
+│   │   ├── gemini_audio_generator.py
+│   │   ├── timestamp_extractor.py
+│   │   └── action_sync.py
+│   ├── models/                   # Pydantic schemas
+│   │   └── types.py
+│   ├── workspace/                # User workspace (auto-created)
+│   └── sessions/                 # Generated walkthroughs (auto-created)
+│
+└── web/
+    ├── package.json              # Node dependencies
+    ├── vite.config.ts            # Vite configuration
+    ├── tsconfig.json             # TypeScript config
+    └── src/
+        ├── App.tsx               # Main application
+        ├── api.ts                # Backend client
+        ├── components/           # React components
+        │   ├── ChatPanel.tsx
+        │   ├── WalkthroughPlayer.tsx
+        │   └── ChapterTimeline.tsx
+        ├── editor/               # Monaco integration
+        │   └── actionExecutor.ts
+        ├── terminal/             # Xterm.js integration
+        │   └── terminalController.ts
+        └── timeline/             # Audio sync engine
+            └── index.ts
+```
+
+<Warning>
+  **Security:** Never commit your `.env` file to version control! Add it to `.gitignore`.
+</Warning>
+
+## Step 5: Running VSpeak
+
+### Option 1: Manual Start (Recommended for Development)
+
+Open **two terminal windows**:
+
+**Terminal 1 — Backend:**
+```bash
+cd backend
+uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Terminal 2 — Frontend:**
+```bash
+cd web
+npm run dev
+```
+
+### Option 2: Windows Batch Script
+
+```bash
+./start-dev.bat
+```
+
+This script starts both backend and frontend in a single window.
+
+### Verify Everything Works
+
+1. **Backend health check:**
+   ```bash
+   curl http://localhost:8000/api/health
+   ```
+   Should return: `{"status": "healthy"}`
+
+2. **Frontend:** Open http://localhost:3000
+
+3. **Try the demo:** Press play on the preloaded walkthrough
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="ModuleNotFoundError: No module named 'fastapi'">
+    You're not in the correct virtual environment or dependencies weren't installed.
+
+    ```bash
+    cd backend
+    pip install -r requirements.txt
+    ```
+  </Accordion>
+
+  <Accordion title="Error: CEREBRAS_API_KEY not found">
+    Your `.env` file is missing or in the wrong location.
+
+    - Ensure `.env` is in `backend/` directory
+    - Check that it contains `CEREBRAS_API_KEY=your_key`
+    - Restart the backend server after creating `.env`
+  </Accordion>
+
+  <Accordion title="Port 8000 already in use">
+    Another process is using port 8000.
+
+    **Find and kill the process:**
+    ```bash
+    # Linux/Mac
+    lsof -ti:8000 | xargs kill -9
+
+    # Windows
+    netstat -ano | findstr :8000
+    taskkill /PID <PID> /F
+    ```
+
+    Or use a different port:
+    ```bash
+    uvicorn server:app --port 8001
+    ```
+  </Accordion>
+
+  <Accordion title="Frontend shows blank page">
+    Check the browser console for errors.
+
+    Common fixes:
+    - Clear browser cache
+    - Verify backend is running
+    - Check CORS settings in `server.py`
+  </Accordion>
+
+  <Accordion title="Walkthrough generation hangs">
+    Check backend logs for API errors:
+    - Invalid API keys
+    - Rate limits exceeded
+    - Network issues
+
+    Try testing the pipeline directly:
+    ```bash
+    cd backend
+    python main.py --prompt "Create a simple React component"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Production Deployment
+
+For production, consider:
+
+1. **Use a process manager:**
+   ```bash
+   # PM2 for Node.js
+   npm install -g pm2
+   pm2 start "uvicorn server:app --host 0.0.0.0 --port 8000" --name vspeak-backend
+   ```
+
+2. **Build the frontend:**
+   ```bash
+   cd web
+   npm run build
+   ```
+
+3. **Use a reverse proxy (nginx):**
+   ```nginx
+   server {
+       listen 80;
+       server_name your-domain.com;
+
+       location /api {
+           proxy_pass http://localhost:8000;
+       }
+
+       location / {
+           root /path/to/web/dist;
+           try_files $uri /index.html;
+       }
+   }
+   ```
+
+4. **Environment variables:**
+   - Use a secrets manager instead of `.env`
+   - Set `WORKSPACE_ROOT` to a persistent directory
+   - Configure CORS for your domain
+
+5. **Database (optional):**
+   - Replace in-memory storage with PostgreSQL/MongoDB
+   - Store walkthroughs and chat sessions persistently
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Generate your first walkthrough in minutes
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Deep dive into provider settings and customization
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Understand the pipeline and timeline engine
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore FastAPI endpoints and WebSocket protocol
+  </Card>
+</CardGroup>

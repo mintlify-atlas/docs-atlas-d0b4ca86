@@ -1,0 +1,427 @@
+---
+title: Files API
+description: Read, write, create, and delete files in the workspace
+---
+
+The Files API provides complete file system access within the configured workspace directory.
+
+<Warning>
+  All file paths are relative to the workspace root. You cannot access files outside the workspace.
+</Warning>
+
+## Workspace Configuration
+
+The workspace root is configured via the `WORKSPACE_ROOT` environment variable:
+
+```bash
+export WORKSPACE_ROOT=/path/to/your/workspace
+```
+
+Default: `./workspace` relative to the server directory.
+
+---
+
+## List Files
+
+<api method="GET" endpoint="/api/files">
+  Get a hierarchical tree of all files and directories in the workspace.
+</api>
+
+### Response
+
+<ResponseField name="files" type="array">
+  Recursive file tree structure. Each item has:
+  
+  <Expandable title="File/Directory properties">
+    <ResponseField name="name" type="string">
+      File or directory name.
+    </ResponseField>
+    
+    <ResponseField name="path" type="string">
+      Relative path from workspace root (forward slashes).
+    </ResponseField>
+    
+    <ResponseField name="type" type="string">
+      Either `"file"` or `"directory"`.
+    </ResponseField>
+    
+    <ResponseField name="children" type="array">
+      For directories: array of nested file/directory objects. Omitted for files.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response Example
+
+```json
+{
+  "files": [
+    {
+      "name": "src",
+      "path": "src",
+      "type": "directory",
+      "children": [
+        {
+          "name": "main.py",
+          "path": "src/main.py",
+          "type": "file"
+        },
+        {
+          "name": "utils",
+          "path": "src/utils",
+          "type": "directory",
+          "children": [
+            {
+              "name": "helpers.py",
+              "path": "src/utils/helpers.py",
+              "type": "file"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "README.md",
+      "path": "README.md",
+      "type": "file"
+    }
+  ]
+}
+```
+
+### Notes
+
+- Files/directories starting with `.` are **excluded** (e.g., `.git`, `.env`)
+- Results are sorted: directories first, then alphabetically
+- Permission errors are silently ignored
+
+### cURL Example
+
+```bash
+curl http://localhost:8000/api/files
+```
+
+---
+
+## Read File
+
+<api method="GET" endpoint="/api/files/{file_path}">
+  Read the contents of a file.
+</api>
+
+### Path Parameters
+
+<ParamField path="file_path" type="string" required>
+  Relative path to the file from workspace root (e.g., `src/main.py`).
+</ParamField>
+
+### Response
+
+<ResponseField name="path" type="string">
+  The file path that was read.
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  UTF-8 decoded file contents.
+</ResponseField>
+
+<ResponseField name="language" type="string">
+  Detected language identifier based on file extension (e.g., `"python"`, `"javascript"`, `"markdown"`).
+</ResponseField>
+
+### Response Example
+
+```json
+{
+  "path": "src/main.py",
+  "content": "from fastapi import FastAPI\n\napp = FastAPI()\n\n@app.get(\"/\")\ndef root():\n    return {\"message\": \"Hello World\"}",
+  "language": "python"
+}
+```
+
+### Error Responses
+
+<ResponseField name="404" type="error">
+  File not found.
+  
+  ```json
+  {
+    "detail": "File not found: src/missing.py"
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="400" type="error">
+  Path is a directory or file is binary.
+  
+  ```json
+  {
+    "detail": "Not a file: src"
+  }
+  ```
+  
+  ```json
+  {
+    "detail": "Cannot read binary file"
+  }
+  ```
+</ResponseField>
+
+### cURL Example
+
+```bash
+curl http://localhost:8000/api/files/src/main.py
+```
+
+---
+
+## Write File
+
+<api method="PUT" endpoint="/api/files/{file_path}">
+  Write or overwrite a file with new content.
+</api>
+
+### Path Parameters
+
+<ParamField path="file_path" type="string" required>
+  Relative path to the file (e.g., `src/main.py`).
+</ParamField>
+
+### Request Body
+
+Send the content as a **raw string** in the request body:
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/")
+def root():
+    return {"message": "Hello World"}
+```
+
+<Note>
+  The request body should be `Content-Type: text/plain` with the raw file content.
+</Note>
+
+### Response
+
+```json
+{
+  "success": true,
+  "path": "src/main.py"
+}
+```
+
+### Behavior
+
+- **Creates parent directories** if they don't exist
+- **Overwrites** existing files
+- Writes as UTF-8 encoded text
+
+### cURL Example
+
+```bash
+curl -X PUT http://localhost:8000/api/files/src/main.py \
+  -H "Content-Type: text/plain" \
+  --data 'from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/")
+def root():
+    return {"message": "Hello World"}'
+```
+
+---
+
+## Create File
+
+<api method="POST" endpoint="/api/files/{file_path}">
+  Create a new file. Fails if the file already exists.
+</api>
+
+### Path Parameters
+
+<ParamField path="file_path" type="string" required>
+  Relative path for the new file.
+</ParamField>
+
+### Request Body
+
+Optional content as raw string (defaults to empty file).
+
+### Response
+
+```json
+{
+  "success": true,
+  "path": "src/new_file.py"
+}
+```
+
+### Error Responses
+
+<ResponseField name="409" type="error">
+  File already exists.
+  
+  ```json
+  {
+    "detail": "File already exists: src/main.py"
+  }
+  ```
+</ResponseField>
+
+### cURL Example
+
+```bash
+# Create empty file
+curl -X POST http://localhost:8000/api/files/src/new_file.py
+
+# Create file with content
+curl -X POST http://localhost:8000/api/files/src/config.py \
+  -H "Content-Type: text/plain" \
+  --data 'DEBUG = True
+API_KEY = "dev"'
+```
+
+---
+
+## Delete File
+
+<api method="DELETE" endpoint="/api/files/{file_path}">
+  Delete a file or directory.
+</api>
+
+### Path Parameters
+
+<ParamField path="file_path" type="string" required>
+  Relative path to delete.
+</ParamField>
+
+### Response
+
+```json
+{
+  "success": true,
+  "path": "src/old_file.py"
+}
+```
+
+### Behavior
+
+- **Files**: Deleted immediately
+- **Directories**: Recursively deleted with all contents
+
+<Warning>
+  Directory deletion is recursive and permanent. Use with caution.
+</Warning>
+
+### Error Responses
+
+<ResponseField name="404" type="error">
+  File or directory not found.
+  
+  ```json
+  {
+    "detail": "File not found: src/missing.py"
+  }
+  ```
+</ResponseField>
+
+### cURL Example
+
+```bash
+curl -X DELETE http://localhost:8000/api/files/src/old_file.py
+```
+
+---
+
+## Create Directory
+
+<api method="POST" endpoint="/api/files/mkdir/{dir_path}">
+  Create a new directory (and parent directories if needed).
+</api>
+
+### Path Parameters
+
+<ParamField path="dir_path" type="string" required>
+  Relative path for the directory (e.g., `src/utils/helpers`).
+</ParamField>
+
+### Response
+
+```json
+{
+  "success": true,
+  "path": "src/utils/helpers"
+}
+```
+
+### Behavior
+
+- Creates all parent directories if they don't exist
+- Succeeds silently if directory already exists
+
+### cURL Example
+
+```bash
+curl -X POST http://localhost:8000/api/files/mkdir/src/utils/helpers
+```
+
+---
+
+## Language Detection
+
+The API automatically detects programming languages based on file extensions:
+
+| Extension | Language |
+|-----------|----------|
+| `.py` | `python` |
+| `.js` | `javascript` |
+| `.jsx` | `javascriptreact` |
+| `.ts` | `typescript` |
+| `.tsx` | `typescriptreact` |
+| `.json` | `json` |
+| `.html` | `html` |
+| `.css` | `css` |
+| `.md` | `markdown` |
+| `.yaml`, `.yml` | `yaml` |
+| `.sh`, `.bash` | `shell` |
+| `.sql` | `sql` |
+| `.go` | `go` |
+| `.rs` | `rust` |
+| `.java` | `java` |
+| `.cpp`, `.hpp` | `cpp` |
+| `.c`, `.h` | `c` |
+| Others | `plaintext` |
+
+## Security Considerations
+
+<Warning>
+  - All operations are restricted to the workspace directory
+  - Hidden files (`.env`, `.git`) are excluded from listings
+  - Binary files cannot be read via the API
+  - No authentication is required (local development only)
+</Warning>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use UTF-8 Encoding" icon="file-code">
+    All files are read/written as UTF-8. Ensure your content is text-compatible.
+  </Card>
+  
+  <Card title="Handle Errors" icon="triangle-exclamation">
+    Always check for 404 and 400 errors when reading files.
+  </Card>
+  
+  <Card title="Normalize Paths" icon="folder-tree">
+    Use forward slashes in paths, even on Windows.
+  </Card>
+  
+  <Card title="Check Before Creating" icon="circle-check">
+    Use POST to create files only if they don't exist, or PUT to overwrite.
+  </Card>
+</CardGroup>

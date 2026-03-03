@@ -1,0 +1,293 @@
+---
+title: Walkthrough Generation
+description: Generate AI-powered, audio-narrated coding walkthroughs with synchronized IDE actions
+---
+
+Walkthrough Generation is VSpeak's core feature: it transforms your prompts into complete, narrated coding tutorials with synchronized IDE actions, terminal commands, and chapter navigation.
+
+## How It Works
+
+VSpeak uses a multi-stage pipeline to create walkthroughs:
+
+<Steps>
+  <Step title="Script Generation">
+    An LLM generates a teaching script broken into chunks, each with associated IDE actions (file creation, typing code, terminal commands).
+  </Step>
+  
+  <Step title="Audio Synthesis">
+    Each script chunk is converted to speech using text-to-speech (TTS), then stitched into a complete audio track.
+  </Step>
+  
+  <Step title="Action Synchronization">
+    The audio is transcribed with word-level timestamps, and IDE actions are synced to precise millisecond timings.
+  </Step>
+  
+  <Step title="Chapter Markers">
+    The script is organized into navigable chapters for easy seeking and replay.
+  </Step>
+</Steps>
+
+## Generating a Walkthrough
+
+### From Chat Interface
+
+<Steps>
+  <Step title="Enable Walkthrough Mode">
+    In the chat panel, toggle the "Walkthrough" button to ON (blue state).
+  </Step>
+  
+  <Step title="Enter your prompt">
+    Describe what you want to learn:
+    ```
+    Show me how to create a React counter component
+    ```
+  </Step>
+  
+  <Step title="Wait for generation">
+    You'll see progress stages:
+    - **Thinking...**: Planning the walkthrough
+    - **Generating script...**: Creating the teaching content
+    - **Creating audio...**: Synthesizing speech
+    - **Syncing actions...**: Aligning IDE actions with audio
+  </Step>
+  
+  <Step title="Play the walkthrough">
+    Once ready, click the play button to start the narrated demo.
+  </Step>
+</Steps>
+
+<Tip>
+Good prompts are specific and action-oriented: "Show me how to...", "Walk me through...", "Demonstrate..."
+</Tip>
+
+### Via API
+
+You can generate walkthroughs programmatically:
+
+```python
+import requests
+
+response = requests.post('http://localhost:8000/api/walkthrough/generate', json={
+    'prompt': 'Create a Python Flask API with authentication'
+})
+
+walkthrough = response.json()['walkthrough']
+audio_url = response.json()['audio_url']
+```
+
+## Pipeline Architecture
+
+### Script Generation
+
+The LLM generates structured JSON with chunks and actions:
+
+```python
+# From backend/models/types.py
+class ScriptChunk(BaseModel):
+    text: str  # 100-150 char narration with vocal directions
+    actions: list[Action]  # IDE actions triggered during this chunk
+
+class GeneratedScript(BaseModel):
+    chunks: list[ScriptChunk]
+    chapters: list[Chapter]
+```
+
+### Action Types
+
+Each chunk can include multiple action types:
+
+| Action Type | Description | Example Params |
+|------------|-------------|----------------|
+| `create_file` | Create a new file | `{"path": "app.js", "content": ""}` |
+| `type_code` | Type code into editor | `{"path": "app.js", "text": "const x = 1;"}` |
+| `switch_tab` | Switch to different file | `{"path": "index.html"}` |
+| `move_cursor` | Move cursor position | `{"line": 5, "column": 10}` |
+| `highlight` | Highlight code range | `{"startLine": 3, "endLine": 5}` |
+| `terminal_command` | Run terminal command | `{"command": "npm install"}` |
+
+### Audio Synthesis
+
+Vocal directions in the script control TTS delivery:
+
+```
+[fast] Let's create a new component. [pause] We'll call it Counter.
+```
+
+- `[fast]`, `[slow]`: Adjust speaking speed
+- `[pause]`: Insert brief pause
+- `[excited]`, `[calm]`: Adjust tone
+
+### Timestamp Synchronization
+
+After TTS generation, the audio is transcribed to get word-level timestamps:
+
+```python
+# From backend/models/types.py
+class TimestampedWord(BaseModel):
+    word: str
+    start_ms: int  # Millisecond timing
+    end_ms: int
+
+class SyncedAction(BaseModel):
+    type: str
+    timestamp_ms: int  # When to execute
+    trigger_word: str  # Word that triggers this action
+    params: dict
+```
+
+Actions are matched to their trigger words in the transcript, ensuring perfect audio-action synchronization.
+
+## Walkthrough Data Structure
+
+```python
+# From backend/models/types.py
+class WalkthroughSession(BaseModel):
+    id: str
+    title: str  # Generated from prompt
+    prompt: str  # Original user prompt
+    created_at: datetime
+    audio_path: str  # Path to WAV file
+    actions: list[SyncedAction]  # Time-synced actions
+    chapters: list[ChapterWithSnapshot]  # Navigation markers
+    duration_ms: int  # Total length
+    script: GeneratedScript  # Full script content
+```
+
+## Generation Stages
+
+The UI displays real-time progress:
+
+```typescript
+// From web/src/components/ChatPanel.tsx
+type GenerationStage = 
+  | 'idle' 
+  | 'thinking' 
+  | 'generating_script' 
+  | 'generating_audio' 
+  | 'syncing' 
+  | 'ready';
+
+const STAGE_LABELS = {
+  thinking: 'Thinking...',
+  generating_script: 'Generating script...',
+  generating_audio: 'Creating audio...',
+  syncing: 'Syncing actions...',
+  ready: 'Ready!'
+};
+```
+
+## Performance Metrics
+
+VSpeak tracks latency for each pipeline stage:
+
+```python
+class LatencyMetrics(BaseModel):
+    script_generation_ms: float
+    tts_per_chunk_ms: list[float]
+    tts_total_ms: float
+    tts_stitching_ms: float
+    stt_transcription_ms: float
+    action_sync_ms: float
+    total_ms: float  # End-to-end time
+```
+
+<Note>
+Typical generation times range from 10-30 seconds depending on walkthrough length and complexity.
+</Note>
+
+## Storage and Persistence
+
+Walkthroughs are saved to the `sessions/` directory:
+
+```
+sessions/
+  {session-id}/
+    walkthrough.json    # Metadata and actions
+    audio.wav          # Generated audio
+```
+
+```python
+# From backend/server.py
+SESSIONS_DIR = Path("sessions")
+
+# Walkthroughs are loaded from disk on demand
+walkthrough_json = SESSIONS_DIR / walkthrough_id / "walkthrough.json"
+```
+
+## Example Prompts
+
+### Web Development
+```
+Show me how to create a responsive navigation bar with CSS
+```
+
+### Backend Development
+```
+Walk me through building a REST API with Express and MongoDB
+```
+
+### Data Science
+```
+Demonstrate how to build a linear regression model in Python
+```
+
+### DevOps
+```
+Show me how to dockerize a Node.js application
+```
+
+## Advanced Options
+
+### Custom Session ID
+
+Generate a walkthrough with a specific session ID:
+
+```python
+response = requests.post('/api/walkthrough/generate', json={
+    'prompt': 'Build a chat app with WebSockets',
+    'session_id': 'my-custom-session'
+})
+```
+
+### Retrieving Existing Walkthroughs
+
+```python
+# List all walkthroughs
+walkthroughs = requests.get('/api/walkthroughs').json()
+
+# Get specific walkthrough
+walkthrough = requests.get(f'/api/walkthrough/{session_id}').json()
+
+# Stream audio
+audio_url = f'/api/walkthrough/{session_id}/audio'
+```
+
+## Error Handling
+
+If generation fails, the chat message will include error details:
+
+```typescript
+// From backend/server.py
+try:
+    walkthrough = await generate_walkthrough_internal(request.message)
+except Exception as e:
+    assistant_message.content += f"\n\n(Walkthrough generation failed: {str(e)})"
+```
+
+## Best Practices
+
+1. **Be specific**: Include the technology stack and goal
+2. **Use action verbs**: "Show", "Demonstrate", "Walk through"
+3. **Scope appropriately**: 5-10 minute demos work best
+4. **Test iteratively**: Refine prompts based on results
+
+## Related Features
+
+<CardGroup cols={2}>
+  <Card title="Chapters" icon="list" href="/features/chapters">
+    Navigate walkthrough sections
+  </Card>
+  <Card title="IDE Actions" icon="code" href="/features/ide-actions">
+    See how actions are executed
+  </Card>
+</CardGroup>

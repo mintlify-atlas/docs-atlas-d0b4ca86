@@ -1,0 +1,197 @@
+---
+title: ScriptGenerator
+description: Generate pre-chunked scripts using GLM 4.7 for synchronized narration and IDE actions
+---
+
+The `ScriptGenerator` class creates AI-narrated scripts optimized for text-to-speech conversion with synchronized IDE actions. It uses Cerebras's GLM 4.7 model to generate structured scripts with vocal directions, chapters, and action triggers.
+
+## Class Overview
+
+```python
+from pipeline import ScriptGenerator
+
+script_gen = ScriptGenerator()
+```
+
+**Location:** `backend/pipeline/script_generator.py:115`
+
+## Methods
+
+### generate()
+
+Generates a complete script with chunks, actions, and chapters based on a user prompt.
+
+```python
+def generate(user_prompt: str) -> tuple[GeneratedScript, float]
+```
+
+<ParamField path="user_prompt" type="str" required>
+  What the user wants the AI coach to demonstrate (e.g., "Create a React component")
+</ParamField>
+
+<ResponseField name="GeneratedScript" type="GeneratedScript">
+  Complete structured script with chunks, actions, and chapters
+  
+  <Expandable title="properties">
+    <ResponseField name="chunks" type="list[ScriptChunk]">
+      List of 100-150 character text chunks with vocal directions and actions
+    </ResponseField>
+    <ResponseField name="chapters" type="list[Chapter]">
+      Chapter markers dividing the tutorial into logical sections
+    </ResponseField>
+    <ResponseField name="total_chunks" type="int">
+      Total number of chunks in the script
+    </ResponseField>
+    <ResponseField name="total_actions" type="int">
+      Total number of IDE actions across all chunks
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="latency_ms" type="float">
+  Time taken for script generation in milliseconds
+</ResponseField>
+
+#### Example Usage
+
+```python
+from pipeline import ScriptGenerator
+
+# Initialize the generator
+script_gen = ScriptGenerator()
+
+# Generate a script
+script, latency = script_gen.generate(
+    "Create a simple React component that displays a greeting"
+)
+
+print(f"Generated {script.total_chunks} chunks in {latency:.0f}ms")
+print(f"Total actions: {script.total_actions}")
+
+# Access chunks
+for i, chunk in enumerate(script.chunks):
+    print(f"Chunk {i}: {chunk.text}")
+    for action in chunk.actions:
+        print(f"  Action: {action.type} triggered by '{action.trigger_word}'")
+
+# Access chapters
+for chapter in script.chapters:
+    print(f"Chapter: {chapter.title} (chunks {chapter.start_chunk_index}-{chapter.end_chunk_index})")
+```
+
+## Script Structure
+
+### ScriptChunk
+
+Each chunk represents a 100-150 character segment of narration with optional actions.
+
+<ResponseField name="text" type="str">
+  Narration text with vocal direction tags like `[cheerful]`, `[thoughtful]`, etc.
+</ResponseField>
+
+<ResponseField name="actions" type="list[Action]">
+  IDE actions triggered during this chunk
+  
+  <Expandable title="Action fields">
+    <ResponseField name="type" type="str">
+      Action type: `create_file`, `type_code`, `switch_tab`, `delete`, `move_cursor`, `scroll`, `highlight`, `terminal_command`, `run_code`, `show_output`
+    </ResponseField>
+    <ResponseField name="trigger_word" type="str">
+      Word in the narration that triggers this action
+    </ResponseField>
+    <ResponseField name="params" type="dict">
+      Action-specific parameters (e.g., `{"path": "app.js"}` for create_file)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Chapter
+
+Chapters divide the script into logical sections (similar to YouTube chapters).
+
+<ResponseField name="title" type="str">
+  Chapter title (e.g., "Introduction", "Creating the Component")
+</ResponseField>
+
+<ResponseField name="description" type="str | None">
+  Optional brief description of the chapter
+</ResponseField>
+
+<ResponseField name="start_chunk_index" type="int">
+  Index of the first chunk in this chapter (0-based)
+</ResponseField>
+
+<ResponseField name="end_chunk_index" type="int">
+  Index of the last chunk in this chapter (0-based)
+</ResponseField>
+
+## Vocal Directions
+
+The script generator uses expressive vocal direction tags to make narration dynamic:
+
+- `[cheerful]` - Happy, upbeat tone
+- `[excited]` - Enthusiastic, energetic
+- `[thoughtful]` - Contemplative, considering
+- `[whisper]` - Soft, intimate
+- `[dramatic]` - Intense, impactful
+- `[encouraging]` - Supportive, motivating
+- `[calm]` - Relaxed, steady
+- `[confident]` - Assured, professional
+
+## Action Types
+
+### create_file
+Create a new file in the IDE.
+```python
+{"type": "create_file", "params": {"path": "app.js"}}
+```
+
+### type_code
+Type code with letter-by-letter animation.
+```python
+{"type": "type_code", "params": {"content": "const x = 1;", "speed": "medium"}}
+```
+
+### switch_tab
+Switch to a different file/tab.
+```python
+{"type": "switch_tab", "params": {"target": "index.html"}}
+```
+
+### terminal_command
+Execute a terminal command.
+```python
+{"type": "terminal_command", "params": {"command": "npm install"}}
+```
+
+### highlight
+Highlight code section.
+```python
+{"type": "highlight", "params": {"start_line": 5, "end_line": 10}}
+```
+
+## Configuration
+
+The script generator uses configuration from `config.py:36`:
+
+<ParamField path="MIN_CHUNK_LENGTH" type="int" default="100">
+  Minimum characters per chunk
+</ParamField>
+
+<ParamField path="MAX_CHUNK_LENGTH" type="int" default="150">
+  Maximum characters per chunk
+</ParamField>
+
+<ParamField path="TARGET_SCRIPT_DURATION_SECONDS" type="int" default="120">
+  Target duration of the narration (approximately 2 minutes)
+</ParamField>
+
+<ParamField path="CEREBRAS_MODEL" type="str" default="zai-glm-4.7">
+  LLM model used for script generation
+</ParamField>
+
+## See Also
+
+- [AudioGenerator](/api/pipeline/audio-generator) - Convert scripts to speech
+- [ActionSync](/api/pipeline/action-sync) - Synchronize actions to timestamps
+- [Pipeline Overview](/concepts/pipeline) - Complete pipeline workflow

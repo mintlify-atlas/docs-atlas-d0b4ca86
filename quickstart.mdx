@@ -1,80 +1,235 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get up and running with VSpeak in under 5 minutes"
 ---
 
-## Get started in three steps
+Get VSpeak running locally and watch your first AI-narrated coding walkthrough.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, make sure you have:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+- **Python 3.11+** installed
+- **Node.js 18+** installed  
+- **API keys** for your chosen providers (see [Installation](/installation) for details)
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+VSpeak comes with a preloaded demo walkthrough, so you can see it in action immediately after starting the servers.
 </Note>
+
+## Quick Setup
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/utopianguide/VSpeak.git
+    cd VSpeak
+    ```
+  </Step>
+
+  <Step title="Configure environment">
+    Create a `.env` file in the `backend/` directory:
+
+    ```bash backend/.env
+    # Required API keys
+    CEREBRAS_API_KEY=your_cerebras_key
+    GROQ_API_KEY=your_groq_key
+    GEMINI_API_KEY=your_gemini_key
+    ```
+
+    <Tip>
+    Get API keys from:
+    - [Cerebras](https://cloud.cerebras.ai/) - For LLM script generation
+    - [Groq](https://console.groq.com/) - For Whisper STT
+    - [Google AI Studio](https://aistudio.google.com/) - For Gemini TTS
+    </Tip>
+  </Step>
+
+  <Step title="Install dependencies">
+    <CodeGroup>
+      ```bash Windows
+      # One command setup
+      cd backend && pip install -r requirements.txt && cd ../web && npm install
+      ```
+
+      ```bash Linux/Mac
+      # Backend
+      cd backend
+      pip install -r requirements.txt
+
+      # Frontend
+      cd ../web
+      npm install
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Start the servers">
+    <Tabs>
+      <Tab title="Windows">
+        ```bash
+        # From the project root
+        ./start-dev.bat
+        ```
+        This starts both backend (port 8000) and frontend (port 3000) automatically.
+      </Tab>
+      
+      <Tab title="Linux/Mac">
+        Open two terminal windows:
+
+        ```bash Terminal 1: Backend
+        cd backend
+        uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+        ```
+
+        ```bash Terminal 2: Frontend
+        cd web
+        npm run dev
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Open VSpeak">
+    Navigate to [http://localhost:3000](http://localhost:3000) in your browser.
+
+    You'll see the VSpeak IDE with a preloaded demo walkthrough ready to play!
+  </Step>
+</Steps>
+
+## Try the Demo Walkthrough
+
+When you first open VSpeak, you'll see a demo conversation in the chat panel:
+
+1. **Click the Play button** in the Walkthrough Player (top of right panel)
+2. **Watch the magic happen**:
+   - AI voice narrates what it's building
+   - Code types itself in the editor in perfect sync
+   - Files get created automatically
+   - Terminal commands execute on cue
+
+3. **Try the controls**:
+   - ⏸️ **Pause** to read the code
+   - ⏩ **Jump to chapters** by clicking the timeline
+   - 🔄 **Reset** to watch again
+
+<Tip>
+The demo walkthrough demonstrates all VSpeak features: animated typing, chapter navigation, terminal integration, and audio-visual synchronization.
+</Tip>
+
+## Generate Your First Walkthrough
+
+Now create a custom walkthrough:
+
+1. **Type a prompt** in the chat input at the bottom of the right panel:
+   ```
+   Show me how to build a React counter component
+   ```
+
+2. **Wait for generation** (~15-30 seconds):
+   - Script generation: ~2-5s
+   - Audio synthesis: ~5-10s  
+   - Timestamp extraction: ~3-8s
+   - Action synchronization: &lt;1s
+
+3. **Play your walkthrough** when generation completes
+
+### Example Prompts to Try
+
+<CardGroup cols={2}>
+  <Card title="Web Development" icon="globe">
+    "Create a responsive navbar with dropdown menu"
+  </Card>
+  
+  <Card title="Backend APIs" icon="server">
+    "Build a REST API with authentication in Flask"
+  </Card>
+  
+  <Card title="React Components" icon="react">
+    "Show me how to use React hooks for state management"
+  </Card>
+  
+  <Card title="Data Processing" icon="database">
+    "Write a Python script to parse CSV and export JSON"
+  </Card>
+</CardGroup>
+
+## What's Happening Behind the Scenes?
+
+When you request a walkthrough, VSpeak runs a 4-stage pipeline:
+
+```mermaid
+graph LR
+    A[Your Prompt] --> B[Script Generation<br/>GLM 4.7]
+    B --> C[Audio Synthesis<br/>Gemini TTS]
+    C --> D[Timestamp Extraction<br/>Whisper STT]
+    D --> E[Action Sync]
+    E --> F[Playable Walkthrough]
+```
+
+<Accordion title="Pipeline Details">
+  1. **Script Generation**: LLM creates a narrated script with embedded IDE actions
+  2. **Audio Synthesis**: Text-to-speech converts the script to voice audio
+  3. **Timestamp Extraction**: Speech-to-text extracts word-level timestamps  
+  4. **Action Synchronization**: Actions are matched to their trigger words in the audio
+
+  See [Pipeline Concepts](/concepts/pipeline) for technical details.
+</Accordion>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="Port 3000 or 8000 already in use">
+    Kill the existing process or change ports:
+    
+    ```bash
+    # Backend: Edit backend/server.py, change port 8000 to 8001
+    # Frontend: Edit web/vite.config.ts, change port 3000 to 3001
+    ```
+  </Accordion>
+
+  <Accordion title="API key errors">
+    Make sure your `.env` file is in the `backend/` directory (not the project root) and contains valid keys:
+    
+    ```bash
+    cd backend
+    cat .env  # Should show your API keys
+    ```
+  </Accordion>
+
+  <Accordion title="Module not found errors">
+    Reinstall dependencies:
+    
+    ```bash
+    cd backend && pip install -r requirements.txt
+    cd ../web && npm install
+    ```
+  </Accordion>
+
+  <Accordion title="Frontend can't connect to backend">
+    Check that:
+    - Backend is running on port 8000
+    - No CORS errors in browser console
+    - `http://localhost:8000/api/health` returns `{"status":"healthy"}`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="sliders" href="/configuration/providers">
+    Switch between AI providers and customize settings
+  </Card>
+  
+  <Card title="Features" icon="sparkles" href="/features/walkthrough-generation">
+    Learn about chapters, IDE actions, and customization
+  </Card>
+  
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Integrate VSpeak into your own applications
+  </Card>
+  
+  <Card title="User Guides" icon="book-open" href="/guides/creating-walkthroughs">
+    Master VSpeak with step-by-step guides
+  </Card>
+</CardGroup>

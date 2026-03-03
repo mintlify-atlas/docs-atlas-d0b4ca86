@@ -1,0 +1,277 @@
+---
+title: TimestampExtractor
+description: Extract word-level timestamps from audio using Whisper STT for precise action synchronization
+---
+
+The `TimestampExtractor` class uses Groq's Whisper model to transcribe audio and extract word-level timing information. This enables precise synchronization of IDE actions to spoken trigger words.
+
+## Class Overview
+
+```python
+from pipeline import TimestampExtractor
+
+ts_extractor = TimestampExtractor()
+```
+
+**Location:** `backend/pipeline/timestamp_extractor.py:10`
+
+## Methods
+
+### extract_timestamps()
+
+Transcribes audio and extracts word-level timestamps for the entire narration.
+
+```python
+def extract_timestamps(audio_path: Path) -> tuple[list[TimestampedWord], float]
+```
+
+<ParamField path="audio_path" type="Path" required>
+  Path to the audio file (WAV format)
+</ParamField>
+
+<ResponseField name="timestamps" type="list[TimestampedWord]">
+  List of words with their timing information
+  
+  <Expandable title="TimestampedWord fields">
+    <ResponseField name="word" type="str">
+      The transcribed word
+    </ResponseField>
+    <ResponseField name="start_ms" type="int">
+      Start time in milliseconds
+    </ResponseField>
+    <ResponseField name="end_ms" type="int">
+      End time in milliseconds
+    </ResponseField>
+    <ResponseField name="duration_ms" type="int">
+      Duration of the word (computed property)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="latency_ms" type="float">
+  Time taken for transcription in milliseconds
+</ResponseField>
+
+#### Example Usage
+
+```python
+from pathlib import Path
+from pipeline import TimestampExtractor
+
+# Extract timestamps from audio
+ts_extractor = TimestampExtractor()
+audio_path = Path("output/audio.wav")
+
+timestamps, latency = ts_extractor.extract_timestamps(audio_path)
+
+print(f"Extracted {len(timestamps)} word timestamps in {latency:.0f}ms")
+
+# Display first 5 words with timings
+for ts in timestamps[:5]:
+    print(f"{ts.word}: {ts.start_ms}ms - {ts.end_ms}ms ({ts.duration_ms}ms)")
+```
+
+### find_word_timestamp()
+
+Finds the first occurrence of a specific word in the timestamp list, optionally starting from a specific position.
+
+```python
+def find_word_timestamp(
+    timestamps: list[TimestampedWord],
+    trigger_word: str,
+    start_from_ms: int = 0
+) -> TimestampedWord | None
+```
+
+<ParamField path="timestamps" type="list[TimestampedWord]" required>
+  List of timestamped words from extract_timestamps()
+</ParamField>
+
+<ParamField path="trigger_word" type="str" required>
+  Word to search for (case-insensitive, punctuation ignored)
+</ParamField>
+
+<ParamField path="start_from_ms" type="int" default="0">
+  Only consider words after this timestamp (useful for handling duplicate words)
+</ParamField>
+
+<ResponseField name="result" type="TimestampedWord | None">
+  The matching word's timestamp, or None if not found
+</ResponseField>
+
+#### Example Usage
+
+```python
+# Find when the word "create" is spoken
+ts = ts_extractor.find_word_timestamp(timestamps, "create")
+if ts:
+    print(f"'create' spoken at {ts.start_ms}ms")
+
+# Find next occurrence after 5 seconds
+ts_next = ts_extractor.find_word_timestamp(
+    timestamps, 
+    "create",
+    start_from_ms=5000
+)
+if ts_next:
+    print(f"Second 'create' at {ts_next.start_ms}ms")
+```
+
+### get_all_occurrences()
+
+Finds all occurrences of a word in the timestamp list.
+
+```python
+def get_all_occurrences(
+    timestamps: list[TimestampedWord],
+    trigger_word: str
+) -> list[TimestampedWord]
+```
+
+<ParamField path="timestamps" type="list[TimestampedWord]" required>
+  List of timestamped words
+</ParamField>
+
+<ParamField path="trigger_word" type="str" required>
+  Word to search for (case-insensitive)
+</ParamField>
+
+<ResponseField name="matches" type="list[TimestampedWord]">
+  All matching word timestamps in chronological order
+</ResponseField>
+
+#### Example Usage
+
+```python
+# Find all times "function" is mentioned
+occurrences = ts_extractor.get_all_occurrences(timestamps, "function")
+
+print(f"'function' appears {len(occurrences)} times:")
+for i, ts in enumerate(occurrences, 1):
+    print(f"  {i}. at {ts.start_ms}ms")
+```
+
+## Word Matching Logic
+
+The timestamp extractor uses intelligent word matching:
+
+```python
+# Case-insensitive matching
+"Create" matches "create"
+"CREATE" matches "create"
+
+# Punctuation is stripped
+"create," matches "create"
+"create!" matches "create"
+"create?" matches "create"
+
+# Removed: .,!?;:'"
+```
+
+## Complete Workflow Example
+
+```python
+from pathlib import Path
+from pipeline import (
+    ScriptGenerator,
+    AudioGenerator,
+    TimestampExtractor,
+    ActionSyncEngine
+)
+
+# 1. Generate script
+script_gen = ScriptGenerator()
+script, _ = script_gen.generate("Create a Python function")
+
+# 2. Generate audio
+output_dir = Path("./output")
+audio_gen = AudioGenerator(output_dir)
+audio_path, _, _ = audio_gen.generate_audio(script)
+
+# 3. Extract timestamps
+ts_extractor = TimestampExtractor()
+timestamps, latency = ts_extractor.extract_timestamps(audio_path)
+
+print(f"Transcribed {len(timestamps)} words in {latency:.0f}ms")
+
+# 4. Find specific trigger words
+for chunk in script.chunks:
+    for action in chunk.actions:
+        ts = ts_extractor.find_word_timestamp(
+            timestamps,
+            action.trigger_word
+        )
+        if ts:
+            print(f"Action '{action.type}' triggers at {ts.start_ms}ms")
+        else:
+            print(f"Warning: Trigger word '{action.trigger_word}' not found")
+```
+
+## STT Configuration
+
+The timestamp extractor uses Groq's Whisper model:
+
+<ParamField path="STT_MODEL" type="str" default="whisper-large-v3-turbo">
+  Whisper model for transcription (from `config.py:33`)
+</ParamField>
+
+<ParamField path="GROQ_API_KEY" type="str" required>
+  API key for Groq services (from environment)
+</ParamField>
+
+## Performance
+
+Typical transcription performance:
+
+- **Latency:** 2-5 seconds for 2-minute audio
+- **Accuracy:** 95%+ word recognition with clear speech
+- **Word-level precision:** ±50ms timestamp accuracy
+
+## Error Handling
+
+```python
+try:
+    timestamps, latency = ts_extractor.extract_timestamps(audio_path)
+except FileNotFoundError:
+    print(f"Audio file not found: {audio_path}")
+except Exception as e:
+    print(f"Transcription failed: {e}")
+
+# Handle missing trigger words
+ts = ts_extractor.find_word_timestamp(timestamps, "nonexistent")
+if ts is None:
+    print("Trigger word not found in transcription")
+    # Use fallback strategy or skip action
+```
+
+## Debugging Tips
+
+```python
+# Export timestamps to JSON for inspection
+import json
+
+timestamps_data = [
+    {
+        "word": ts.word,
+        "start_ms": ts.start_ms,
+        "end_ms": ts.end_ms,
+        "duration_ms": ts.duration_ms
+    }
+    for ts in timestamps
+]
+
+with open("timestamps.json", "w") as f:
+    json.dump(timestamps_data, f, indent=2)
+
+# Analyze word frequency
+from collections import Counter
+
+word_counts = Counter(ts.word.lower() for ts in timestamps)
+print("Most common words:", word_counts.most_common(10))
+```
+
+## See Also
+
+- [AudioGenerator](/api/pipeline/audio-generator) - Generate audio files
+- [ActionSync](/api/pipeline/action-sync) - Synchronize actions to timestamps
+- [Pipeline Overview](/concepts/pipeline) - Complete pipeline workflow

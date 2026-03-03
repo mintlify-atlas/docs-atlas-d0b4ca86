@@ -1,0 +1,399 @@
+---
+title: "Speech-to-Text Configuration"
+description: "Configure Groq Whisper for audio transcription with word-level timestamps"
+---
+
+VSpeak uses Groq's Whisper Large v3 Turbo for speech-to-text transcription with word-level timestamps. This guide covers all STT configuration options.
+
+## Model Configuration
+
+**Location:** `backend/config.py:33`
+
+```python
+STT_MODEL = "whisper-large-v3-turbo"
+```
+
+<ParamField path="STT_MODEL" type="string" default="whisper-large-v3-turbo">
+  The Whisper model used for speech-to-text transcription. Whisper Large v3 Turbo provides the best balance of speed and accuracy.
+</ParamField>
+
+## Groq STT Client
+
+The Groq STT client provides word-level timestamp extraction for precise audio synchronization.
+
+**Location:** `backend/clients/groq_client.py:48-90`
+
+### Client Initialization
+
+```python
+from clients import GroqSTTClient
+import config
+
+class GroqSTTClient:
+    def __init__(self):
+        self.client = Groq(api_key=config.GROQ_API_KEY)
+        self.model = config.STT_MODEL
+```
+
+<Note>
+The STT client requires a valid `GROQ_API_KEY` environment variable. See the [Environment Configuration](/configuration/environment) guide.
+</Note>
+
+## Transcription Parameters
+
+### API Configuration
+
+**Location:** `backend/clients/groq_client.py:68-75`
+
+```python
+transcription = self.client.audio.transcriptions.create(
+    file=audio_file,
+    model=self.model,
+    response_format="verbose_json",
+    timestamp_granularities=["word"],
+    language="en",
+    temperature=0.0
+)
+```
+
+<ParamField path="response_format" type="string" default="verbose_json">
+  Response format for transcription. `"verbose_json"` includes word-level timestamps and metadata.
+</ParamField>
+
+<ParamField path="timestamp_granularities" type="array" default='["word"]'>
+  Granularity of timestamps:
+  - `["word"]`: Word-level timestamps (default)
+  - `["segment"]`: Sentence/phrase-level timestamps
+</ParamField>
+
+<ParamField path="language" type="string" default="en">
+  Language code for transcription. Currently set to English (`"en"`).
+</ParamField>
+
+<ParamField path="temperature" type="float" default="0.0">
+  Sampling temperature:
+  - `0.0`: Deterministic, most accurate (recommended for STT)
+  - `0.0-1.0`: Increasing randomness
+</ParamField>
+
+<Warning>
+For maximum transcription accuracy, keep `temperature=0.0`. Higher values may introduce transcription errors.
+</Warning>
+
+## Word-Level Timestamps
+
+### TimestampedWord Model
+
+The client returns structured timestamp data for each word:
+
+**Location:** `backend/clients/groq_client.py:82-88`
+
+```python
+TimestampedWord(
+    word=word_data.word,
+    start_ms=int(word_data.start * 1000),
+    end_ms=int(word_data.end * 1000)
+)
+```
+
+### Timestamp Structure
+
+| Field | Type | Description | Example |
+|-------|------|-------------|----------|
+| `word` | `string` | Transcribed word | `"Hello"` |
+| `start_ms` | `integer` | Start time in milliseconds | `1250` |
+| `end_ms` | `integer` | End time in milliseconds | `1500` |
+
+<Note>
+Whisper API returns timestamps in seconds (float). The client converts them to milliseconds (int) for easier processing.
+</Note>
+
+## Usage Example
+
+### Basic Transcription
+
+```python
+from clients import GroqSTTClient
+from pathlib import Path
+
+# Initialize client
+stt_client = GroqSTTClient()
+
+# Transcribe audio file
+audio_path = Path("output/narration.wav")
+timestamps, latency = stt_client.transcribe_with_timestamps(audio_path)
+
+print(f"Transcribed {len(timestamps)} words in {latency:.2f}ms")
+
+# Print word timestamps
+for ts in timestamps:
+    print(f"{ts.word}: {ts.start_ms}ms - {ts.end_ms}ms")
+```
+
+### Output Example
+
+```
+Transcribed 42 words in 1234.56ms
+
+Let's: 0ms - 250ms
+create: 250ms - 500ms
+a: 500ms - 600ms
+new: 600ms - 850ms
+Python: 850ms - 1200ms
+file: 1200ms - 1500ms
+...
+```
+
+## Advanced Usage
+
+### Synchronizing Transcription with Video
+
+```python
+import json
+from pathlib import Path
+from clients import GroqSTTClient
+
+# Transcribe narration
+stt = GroqSTTClient()
+timestamps, _ = stt.transcribe_with_timestamps(Path("narration.wav"))
+
+# Convert to subtitle format
+subtitles = []
+for ts in timestamps:
+    subtitles.append({
+        "start": ts.start_ms / 1000,  # Convert to seconds
+        "end": ts.end_ms / 1000,
+        "text": ts.word
+    })
+
+# Save as JSON
+with open("subtitles.json", "w") as f:
+    json.dump(subtitles, f, indent=2)
+```
+
+### Extracting Key Moments
+
+```python
+from clients import GroqSTTClient
+from pathlib import Path
+
+# Transcribe
+stt = GroqSTTClient()
+timestamps, _ = stt.transcribe_with_timestamps(Path("narration.wav"))
+
+# Find specific words/phrases
+target_words = ["function", "error", "output"]
+key_moments = []
+
+for ts in timestamps:
+    if ts.word.lower().strip() in target_words:
+        key_moments.append({
+            "word": ts.word,
+            "timestamp": ts.start_ms / 1000
+        })
+
+print("Key moments:")
+for moment in key_moments:
+    print(f"  {moment['word']} at {moment['timestamp']:.2f}s")
+```
+
+### Building Karaoke-Style Highlighting
+
+```python
+import time
+from clients import GroqSTTClient
+from pathlib import Path
+
+# Transcribe
+stt = GroqSTTClient()
+timestamps, _ = stt.transcribe_with_timestamps(Path("narration.wav"))
+
+# Simulate real-time highlighting
+start_time = time.time()
+
+for ts in timestamps:
+    # Wait until word should appear
+    target_time = ts.start_ms / 1000
+    while (time.time() - start_time) < target_time:
+        time.sleep(0.01)
+    
+    # Highlight word
+    print(f"\033[1;33m{ts.word}\033[0m", end=" ", flush=True)
+```
+
+## Performance Considerations
+
+### Latency Tracking
+
+The client automatically tracks transcription latency:
+
+```python
+timestamps, latency_ms = stt.transcribe_with_timestamps(audio_path)
+print(f"Transcription took {latency_ms:.2f}ms")
+```
+
+<Note>
+Transcription time typically ranges from 1-3 seconds for a 2-minute audio file, depending on API load.
+</Note>
+
+### Optimization Tips
+
+<AccordionGroup>
+  <Accordion title="Reducing Latency">
+    - Use shorter audio clips when possible
+    - Batch multiple transcriptions asynchronously
+    - Cache transcription results
+    - Use `temperature=0.0` for faster inference
+  </Accordion>
+  
+  <Accordion title="Improving Accuracy">
+    - Use high-quality audio (24kHz sample rate)
+    - Minimize background noise
+    - Ensure clear pronunciation
+    - Keep `temperature=0.0` for deterministic results
+    - Specify correct language code
+  </Accordion>
+  
+  <Accordion title="Handling Large Files">
+    - Split long audio into chunks
+    - Process chunks in parallel
+    - Merge timestamp results with offset adjustment
+    - Consider streaming for real-time transcription
+  </Accordion>
+</AccordionGroup>
+
+## Supported Audio Formats
+
+Whisper supports various audio formats:
+
+| Format | Extension | Supported | Notes |
+|--------|-----------|-----------|-------|
+| WAV | `.wav` | ✅ | Recommended (lossless) |
+| MP3 | `.mp3` | ✅ | Good compression |
+| M4A | `.m4a` | ✅ | Apple format |
+| OGG | `.ogg` | ✅ | Open format |
+| FLAC | `.flac` | ✅ | Lossless compression |
+| WEBM | `.webm` | ✅ | Web format |
+
+<Note>
+VSpeak uses WAV format (24kHz, 16-bit, mono) for consistency across TTS and STT pipelines.
+</Note>
+
+## Error Handling
+
+### Common Issues
+
+```python
+from clients import GroqSTTClient
+from pathlib import Path
+
+stt = GroqSTTClient()
+
+try:
+    timestamps, latency = stt.transcribe_with_timestamps(
+        Path("narration.wav")
+    )
+except FileNotFoundError:
+    print("Audio file not found")
+except Exception as e:
+    print(f"Transcription error: {e}")
+```
+
+<Warning>
+**Common Errors:**
+
+1. **Missing API key**: Ensure `GROQ_API_KEY` is set
+2. **Invalid audio format**: Use supported formats (WAV recommended)
+3. **Empty timestamps**: Audio may be silent or corrupted
+4. **Rate limiting**: Implement retry logic with exponential backoff
+5. **Large file timeout**: Split audio into smaller chunks
+</Warning>
+
+## Response Format Details
+
+### Verbose JSON Structure
+
+The `verbose_json` response includes:
+
+```json
+{
+  "text": "Full transcription text",
+  "words": [
+    {
+      "word": "Hello",
+      "start": 0.0,
+      "end": 0.5
+    },
+    {
+      "word": "world",
+      "start": 0.5,
+      "end": 1.0
+    }
+  ],
+  "language": "en",
+  "duration": 120.5
+}
+```
+
+### Accessing Raw Response
+
+For advanced use cases, access the raw transcription object:
+
+```python
+import wave
+from groq import Groq
+import config
+
+client = Groq(api_key=config.GROQ_API_KEY)
+
+with open("narration.wav", "rb") as audio_file:
+    transcription = client.audio.transcriptions.create(
+        file=audio_file,
+        model=config.STT_MODEL,
+        response_format="verbose_json",
+        timestamp_granularities=["word"],
+        language="en",
+        temperature=0.0
+    )
+
+# Access full response
+print(f"Full text: {transcription.text}")
+print(f"Language: {transcription.language}")
+print(f"Duration: {transcription.duration}s")
+print(f"Words: {len(transcription.words)}")
+```
+
+## Integration with TTS Pipeline
+
+Combine STT with TTS for validation:
+
+```python
+from clients import GeminiTTSClient, GroqSTTClient
+from pathlib import Path
+
+# Generate speech
+tts = GeminiTTSClient()
+original_text = "Let's create a new Python file."
+tts.generate_speech(original_text, Path("test.wav"))
+
+# Transcribe to verify
+stt = GroqSTTClient()
+timestamps, _ = stt.transcribe_with_timestamps(Path("test.wav"))
+transcribed = " ".join([ts.word for ts in timestamps])
+
+# Compare
+print(f"Original:    {original_text}")
+print(f"Transcribed: {transcribed}")
+print(f"Match: {original_text.lower() == transcribed.lower()}")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="TTS Configuration" icon="microphone" href="/configuration/tts">
+    Configure text-to-speech generation
+  </Card>
+  <Card title="Environment Variables" icon="key" href="/configuration/environment">
+    Set up your Groq API key
+  </Card>
+</CardGroup>

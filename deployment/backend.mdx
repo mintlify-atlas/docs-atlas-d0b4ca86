@@ -1,0 +1,409 @@
+---
+title: Backend Deployment
+description: Deploy the VSpeak FastAPI backend server to production
+---
+
+The VSpeak backend is a FastAPI application that handles AI processing, file operations, terminal execution, and walkthrough generation.
+
+## Local Development
+
+<Steps>
+  <Step title="Install Dependencies">
+    Navigate to the backend directory and install Python packages:
+    
+    ```bash
+    cd backend
+    pip install -r requirements.txt
+    ```
+    
+    **Required packages:**
+    - `fastapi` - Web framework
+    - `uvicorn[standard]` - ASGI server
+    - `cerebras-cloud-sdk` - Cerebras API client
+    - `groq` - Groq API client
+    - `google-genai` - Google Gemini API client
+    - `pydantic` - Data validation
+    - `python-dotenv` - Environment variable management
+    - `websockets` - WebSocket support
+    - `python-multipart` - File upload support
+  </Step>
+
+  <Step title="Configure Environment">
+    Create a `.env` file in the `backend` directory:
+    
+    ```bash
+    CEREBRAS_API_KEY=your_cerebras_api_key
+    GROQ_API_KEY=your_groq_api_key
+    GEMINI_API_KEY=your_gemini_api_key
+    WORKSPACE_ROOT=/path/to/workspace
+    ```
+    
+    See [Environment Variables](/deployment/environment-variables) for details.
+  </Step>
+
+  <Step title="Run Development Server">
+    Start the server with auto-reload:
+    
+    ```bash
+    python server.py
+    ```
+    
+    Or use uvicorn directly:
+    
+    ```bash
+    uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+    ```
+    
+    The API will be available at `http://localhost:8000`
+  </Step>
+</Steps>
+
+## Production Deployment
+
+### Option 1: Uvicorn with Systemd
+
+<Steps>
+  <Step title="Create Virtual Environment">
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+    ```
+  </Step>
+
+  <Step title="Create Systemd Service">
+    Create `/etc/systemd/system/vspeak.service`:
+    
+    ```ini
+    [Unit]
+    Description=VSpeak FastAPI Backend
+    After=network.target
+
+    [Service]
+    Type=notify
+    User=www-data
+    Group=www-data
+    WorkingDirectory=/opt/vspeak/backend
+    Environment="PATH=/opt/vspeak/venv/bin"
+    EnvironmentFile=/opt/vspeak/backend/.env
+    ExecStart=/opt/vspeak/venv/bin/uvicorn server:app --host 0.0.0.0 --port 8000
+    Restart=always
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+  </Step>
+
+  <Step title="Enable and Start Service">
+    ```bash
+    sudo systemctl daemon-reload
+    sudo systemctl enable vspeak
+    sudo systemctl start vspeak
+    sudo systemctl status vspeak
+    ```
+  </Step>
+</Steps>
+
+### Option 2: Gunicorn with Workers
+
+For better performance with multiple workers:
+
+<Steps>
+  <Step title="Install Gunicorn">
+    ```bash
+    pip install gunicorn
+    ```
+  </Step>
+
+  <Step title="Run with Gunicorn">
+    ```bash
+    gunicorn server:app \
+      --workers 4 \
+      --worker-class uvicorn.workers.UvicornWorker \
+      --bind 0.0.0.0:8000 \
+      --timeout 120 \
+      --access-logfile /var/log/vspeak/access.log \
+      --error-logfile /var/log/vspeak/error.log
+    ```
+    
+    <Note>
+    **Worker calculation:** Use `(2 x CPU cores) + 1` workers for optimal performance.
+    </Note>
+  </Step>
+
+  <Step title="Update Systemd Service">
+    Modify the `ExecStart` line in the systemd service:
+    
+    ```ini
+    ExecStart=/opt/vspeak/venv/bin/gunicorn server:app \
+      --workers 4 \
+      --worker-class uvicorn.workers.UvicornWorker \
+      --bind 0.0.0.0:8000
+    ```
+  </Step>
+</Steps>
+
+### Option 3: Docker Deployment
+
+<Steps>
+  <Step title="Create Dockerfile">
+    Create `backend/Dockerfile`:
+    
+    ```dockerfile
+    FROM python:3.11-slim
+
+    WORKDIR /app
+
+    # Install system dependencies
+    RUN apt-get update && apt-get install -y \
+        build-essential \
+        && rm -rf /var/lib/apt/lists/*
+
+    # Copy requirements and install dependencies
+    COPY requirements.txt .
+    RUN pip install --no-cache-dir -r requirements.txt
+
+    # Copy application code
+    COPY . .
+
+    # Create directories
+    RUN mkdir -p /app/workspace /app/sessions /app/output
+
+    # Expose port
+    EXPOSE 8000
+
+    # Run with uvicorn
+    CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]
+    ```
+  </Step>
+
+  <Step title="Build and Run">
+    ```bash
+    # Build image
+    docker build -t vspeak-backend .
+
+    # Run container
+    docker run -d \
+      --name vspeak-backend \
+      -p 8000:8000 \
+      --env-file .env \
+      -v $(pwd)/workspace:/app/workspace \
+      -v $(pwd)/sessions:/app/sessions \
+      vspeak-backend
+    ```
+  </Step>
+
+  <Step title="Docker Compose">
+    Create `docker-compose.yml`:
+    
+    ```yaml
+    version: '3.8'
+
+    services:
+      backend:
+        build:
+          context: ./backend
+          dockerfile: Dockerfile
+        ports:
+          - "8000:8000"
+        env_file:
+          - ./backend/.env
+        volumes:
+          - ./workspace:/app/workspace
+          - ./sessions:/app/sessions
+          - ./output:/app/output
+        restart: unless-stopped
+    ```
+    
+    Start with:
+    ```bash
+    docker-compose up -d
+    ```
+  </Step>
+</Steps>
+
+## Nginx Reverse Proxy
+
+Configure Nginx as a reverse proxy for better performance and SSL termination:
+
+```nginx
+server {
+    listen 80;
+    server_name api.vspeak.example.com;
+    
+    # Redirect to HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.vspeak.example.com;
+    
+    ssl_certificate /etc/ssl/certs/vspeak.crt;
+    ssl_certificate_key /etc/ssl/private/vspeak.key;
+    
+    # Increase timeouts for long-running operations
+    proxy_read_timeout 300;
+    proxy_connect_timeout 300;
+    proxy_send_timeout 300;
+    
+    # File upload size limit
+    client_max_body_size 100M;
+    
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    
+    # WebSocket support
+    location /ws/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+## Server Configuration
+
+<CodeGroup>
+```python server.py
+# The server is configured in backend/server.py
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+```python config.py
+# Configuration is managed in backend/config.py
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+CEREBRAS_API_KEY = os.getenv("CEREBRAS_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+```
+</CodeGroup>
+
+## API Endpoints
+
+The backend exposes the following endpoints:
+
+### File System
+- `GET /api/files` - List workspace files
+- `GET /api/files/{path}` - Read file content
+- `PUT /api/files/{path}` - Update file
+- `POST /api/files/{path}` - Create file
+- `DELETE /api/files/{path}` - Delete file
+- `POST /api/files/mkdir/{path}` - Create directory
+
+### Chat & AI
+- `POST /api/chat` - Send chat message
+- `GET /api/chat/sessions` - List chat sessions
+- `GET /api/chat/sessions/{id}` - Get session details
+- `DELETE /api/chat/sessions/{id}` - Delete session
+
+### Walkthroughs
+- `POST /api/walkthrough/generate` - Generate walkthrough
+- `GET /api/walkthrough/{id}` - Get walkthrough details
+- `GET /api/walkthrough/{id}/audio` - Stream audio file
+- `GET /api/walkthroughs` - List all walkthroughs
+- `DELETE /api/walkthrough/{id}` - Delete walkthrough
+
+### Terminal
+- `POST /api/terminal/execute` - Execute command
+- `WS /ws/terminal` - WebSocket terminal
+
+### Health
+- `GET /api/health` - Health check
+
+## Monitoring and Logs
+
+<Steps>
+  <Step title="View Logs">
+    ```bash
+    # Systemd service logs
+    sudo journalctl -u vspeak -f
+    
+    # Docker logs
+    docker logs -f vspeak-backend
+    ```
+  </Step>
+
+  <Step title="Health Check">
+    ```bash
+    curl http://localhost:8000/api/health
+    ```
+    
+    Response:
+    ```json
+    {
+      "status": "healthy",
+      "workspace": "/app/workspace",
+      "sessions_count": 5,
+      "walkthroughs_count": 3
+    }
+    ```
+  </Step>
+
+  <Step title="API Documentation">
+    FastAPI provides automatic API docs:
+    - Swagger UI: `http://localhost:8000/docs`
+    - ReDoc: `http://localhost:8000/redoc`
+  </Step>
+</Steps>
+
+## Performance Tuning
+
+<Warning>
+**Production Recommendations:**
+- Use multiple workers (CPU cores × 2 + 1)
+- Set appropriate timeouts for long-running operations
+- Configure rate limiting to prevent abuse
+- Use Redis for session storage in multi-worker setups
+- Enable gzip compression in Nginx
+- Set up CDN for static audio files
+</Warning>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Server won't start">
+    Check that:
+    - All environment variables are set
+    - Port 8000 is not already in use
+    - Python dependencies are installed
+    - Workspace directory is writable
+  </Accordion>
+
+  <Accordion title="API key errors">
+    Verify:
+    - API keys are correctly set in `.env`
+    - Keys have not expired
+    - API providers are accessible from your server
+    - No rate limits are exceeded
+  </Accordion>
+
+  <Accordion title="WebSocket connection fails">
+    Ensure:
+    - Nginx is configured for WebSocket upgrade
+    - No firewall blocking WebSocket connections
+    - CORS settings allow WebSocket origin
+  </Accordion>
+
+  <Accordion title="File operations fail">
+    Check:
+    - WORKSPACE_ROOT directory exists and is writable
+    - Sufficient disk space available
+    - File permissions are correct
+    - No path traversal protection blocking legitimate paths
+  </Accordion>
+</AccordionGroup>

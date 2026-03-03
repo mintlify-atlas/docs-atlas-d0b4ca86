@@ -1,0 +1,314 @@
+---
+title: Chat API
+description: Send messages to the AI coding assistant and manage chat sessions
+---
+
+## Send Message
+
+<Note>
+  The AI assistant has access to your workspace and can read files, write code, and execute commands.
+</Note>
+
+<api method="POST" endpoint="/api/chat">
+  Send a message to the AI coding assistant and receive a response.
+</api>
+
+### Request Body
+
+<ParamField body="message" type="string" required>
+  The user's message or question to the AI assistant.
+</ParamField>
+
+<ParamField body="session_id" type="string">
+  Optional session ID to continue an existing conversation. If omitted, a new session is created.
+</ParamField>
+
+<ParamField body="generate_walkthrough" type="boolean" default="false">
+  Whether to generate an audio-visual walkthrough along with the response.
+</ParamField>
+
+### Request Example
+
+```json
+{
+  "message": "How do I create a REST API with FastAPI?",
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "generate_walkthrough": false
+}
+```
+
+### Response
+
+<ResponseField name="message" type="ChatMessage">
+  The assistant's response message.
+  
+  <Expandable title="ChatMessage properties">
+    <ResponseField name="id" type="string">
+      Unique message identifier (UUID).
+    </ResponseField>
+    
+    <ResponseField name="role" type="string">
+      Message role: `"user"`, `"assistant"`, or `"system"`.
+    </ResponseField>
+    
+    <ResponseField name="content" type="string">
+      The message text content.
+    </ResponseField>
+    
+    <ResponseField name="timestamp" type="datetime">
+      When the message was created (ISO 8601 format).
+    </ResponseField>
+    
+    <ResponseField name="walkthrough_id" type="string">
+      ID of associated walkthrough if one was generated.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="session_id" type="string">
+  The session ID for this conversation. Use this in subsequent requests to continue the chat.
+</ResponseField>
+
+<ResponseField name="walkthrough" type="WalkthroughSession">
+  Optional walkthrough session if `generate_walkthrough` was true.
+</ResponseField>
+
+### Response Example
+
+```json
+{
+  "message": {
+    "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+    "role": "assistant",
+    "content": "To create a REST API with FastAPI, you'll need to:\n\n1. Install FastAPI: `pip install fastapi uvicorn`\n2. Create a main.py file...",
+    "timestamp": "2026-03-03T14:30:00Z",
+    "walkthrough_id": null
+  },
+  "session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "walkthrough": null
+}
+```
+
+### cURL Example
+
+```bash
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "How do I create a REST API with FastAPI?",
+    "generate_walkthrough": false
+  }'
+```
+
+---
+
+## List Sessions
+
+<api method="GET" endpoint="/api/chat/sessions">
+  Get a list of all chat sessions with basic metadata.
+</api>
+
+### Response
+
+Returns an array of session summaries:
+
+<ResponseField name="id" type="string">
+  Session identifier (UUID).
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  Session title (default: "New Chat").
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp of session creation.
+</ResponseField>
+
+<ResponseField name="updated_at" type="string">
+  ISO 8601 timestamp of last update.
+</ResponseField>
+
+<ResponseField name="message_count" type="integer">
+  Total number of messages in the session.
+</ResponseField>
+
+### Response Example
+
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "title": "New Chat",
+    "created_at": "2026-03-03T14:00:00Z",
+    "updated_at": "2026-03-03T14:30:00Z",
+    "message_count": 8
+  }
+]
+```
+
+### cURL Example
+
+```bash
+curl http://localhost:8000/api/chat/sessions
+```
+
+---
+
+## Get Session
+
+<api method="GET" endpoint="/api/chat/sessions/{session_id}">
+  Retrieve a complete chat session with all messages.
+</api>
+
+### Path Parameters
+
+<ParamField path="session_id" type="string" required>
+  The session ID to retrieve.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Session identifier.
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  Session title.
+</ResponseField>
+
+<ResponseField name="messages" type="array">
+  Array of all ChatMessage objects in chronological order.
+</ResponseField>
+
+<ResponseField name="created_at" type="datetime">
+  Session creation timestamp.
+</ResponseField>
+
+<ResponseField name="updated_at" type="datetime">
+  Last update timestamp.
+</ResponseField>
+
+### Response Example
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "New Chat",
+  "messages": [
+    {
+      "id": "msg-1",
+      "role": "user",
+      "content": "Hello!",
+      "timestamp": "2026-03-03T14:00:00Z",
+      "walkthrough_id": null
+    },
+    {
+      "id": "msg-2",
+      "role": "assistant",
+      "content": "Hi! How can I help you today?",
+      "timestamp": "2026-03-03T14:00:05Z",
+      "walkthrough_id": null
+    }
+  ],
+  "created_at": "2026-03-03T14:00:00Z",
+  "updated_at": "2026-03-03T14:30:00Z"
+}
+```
+
+### Error Responses
+
+<ResponseField name="404" type="error">
+  Session not found.
+  
+  ```json
+  {
+    "detail": "Session not found"
+  }
+  ```
+</ResponseField>
+
+### cURL Example
+
+```bash
+curl http://localhost:8000/api/chat/sessions/550e8400-e29b-41d4-a716-446655440000
+```
+
+---
+
+## Delete Session
+
+<api method="DELETE" endpoint="/api/chat/sessions/{session_id}">
+  Delete a chat session and all its messages.
+</api>
+
+### Path Parameters
+
+<ParamField path="session_id" type="string" required>
+  The session ID to delete.
+</ParamField>
+
+### Response
+
+```json
+{
+  "success": true
+}
+```
+
+### Error Responses
+
+<ResponseField name="404" type="error">
+  Session not found.
+  
+  ```json
+  {
+    "detail": "Session not found"
+  }
+  ```
+</ResponseField>
+
+### cURL Example
+
+```bash
+curl -X DELETE http://localhost:8000/api/chat/sessions/550e8400-e29b-41d4-a716-446655440000
+```
+
+---
+
+## Agent System Prompt
+
+The AI assistant uses the following system prompt:
+
+<Accordion title="View System Prompt">
+  ```
+  You are an AI coding assistant integrated into an IDE. You help users write, understand, and debug code.
+  
+  You have access to the user's workspace and can:
+  1. Read files to understand context
+  2. Write/modify files to implement changes
+  3. Run terminal commands
+  4. Create new files and directories
+  
+  When the user asks you to make changes:
+  1. First understand what they want
+  2. Read relevant files if needed
+  3. Make the changes by providing the new file contents
+  4. Explain what you did
+  
+  Be concise but helpful. Use code blocks with language identifiers.
+  
+  If the user asks you to "show me", "demonstrate", "walk me through", or similar - suggest using the Walkthrough feature for a guided audio-visual tutorial.
+  ```
+</Accordion>
+
+## Context Window
+
+The chat API maintains the last **20 messages** as context for each conversation. This ensures the AI has relevant history without exceeding token limits.
+
+## LLM Configuration
+
+Chats are powered by Cerebras with the following settings:
+
+- **Model**: Configured in `config.CEREBRAS_MODEL`
+- **Temperature**: 0.7
+- **Max Tokens**: 4096

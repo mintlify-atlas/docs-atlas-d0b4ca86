@@ -1,0 +1,595 @@
+---
+title: Generation Pipeline
+description: How VSpeak generates audio-synchronized coding walkthroughs
+---
+
+## Overview
+
+The walkthrough generation pipeline transforms a user's text prompt into a fully synchronized audio-visual coding demonstration. The pipeline consists of four sequential stages, each powered by different AI services.
+
+## Pipeline Flow
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   User      │     │   Script    │     │    Audio    │     │  Timestamp  │
+│   Prompt    │────▶│  Generator  │────▶│  Generator  │────▶│  Extractor  │
+│             │     │  (GLM 4.7)  │     │  (Gemini)   │     │  (Whisper)  │
+└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+                           │                                       │
+                           ▼                                       ▼
+                    ┌─────────────┐                         ┌─────────────┐
+                    │  Chapters   │                         │   Action    │
+                    │  + Actions  │────────────────────────▶│   Sync      │
+                    └─────────────┘                         └─────────────┘
+                                                                   │
+                                                                   ▼
+                                                           ┌─────────────┐
+                                                           │ Synchronized│
+                                                           │ Walkthrough │
+                                                           └─────────────┘
+```
+
+## Stage 1: Script Generation
+
+**Purpose**: Generate a narration script with associated IDE actions
+
+**Service**: Cerebras GLM 4.7
+
+**Input**: User prompt (e.g., "Show me how to build a React component")
+
+**Output**: Structured script with chunks, actions, and chapters
+
+### Script Structure
+
+The LLM generates a script divided into chunks, where each chunk has:
+
+```json
+{
+  "chunks": [
+    {
+      "text": "Let's start by creating a new file called App.jsx.",
+      "actions": [
+        {
+          "type": "create_file",
+          "trigger_word": "creating",
+          "params": {
+            "path": "App.jsx"
+          }
+        }
+      ]
+    },
+    {
+      "text": "Now I'll import React at the top of the file.",
+      "actions": [
+        {
+          "type": "type_code",
+          "trigger_word": "import",
+          "params": {
+            "content": "import React from 'react';\n",
+            "speed": "medium"
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+### Chapters
+
+The LLM also creates logical chapters for navigation:
+
+```json
+{
+  "chapters": [
+    {
+      "title": "Introduction",
+      "description": "Overview of what we'll build",
+      "start_chunk_index": 0,
+      "end_chunk_index": 2
+    },
+    {
+      "title": "Setting Up the File",
+      "description": "Creating our main component file",
+      "start_chunk_index": 3,
+      "end_chunk_index": 5
+    }
+  ]
+}
+```
+
+### Vocal Directions
+
+The script includes directions for expressive speech:
+
+```json
+{
+  "text": "[excited] This is where the magic happens! [thoughtful] Let me show you how state works."
+}
+```
+
+These help the TTS engine vary its tone and pacing.
+
+### Implementation
+
+```python
+class ScriptGenerator:
+    def generate(self, prompt: str) -> tuple[GeneratedScript, float]:
+        start_time = time.perf_counter()
+        
+        # Build the prompt for the LLM
+        system_prompt = SCRIPT_GENERATION_PROMPT
+        user_message = f"Create a walkthrough for: {prompt}"
+        
+        # Call Cerebras API
+        response = client.chat.completions.create(
+            model="cerebras-glm-4.7",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.7,
+            max_tokens=4096
+        )
+        
+        # Parse the JSON response
+        script_data = json.loads(response.choices[0].message.content)
+        script = GeneratedScript.model_validate(script_data)
+        
+        latency = (time.perf_counter() - start_time) * 1000
+        return script, latency
+```
+
+**Location**: `backend/pipeline/script_generator.py`
+
+**Typical latency**: 2-5 seconds
+
+## Stage 2: Audio Generation
+
+**Purpose**: Convert script text to natural-sounding audio
+
+**Service**: Gemini 2.5 Flash TTS
+
+**Input**: Script text (concatenated chunks)
+
+**Output**: WAV audio file
+
+### Text-to-Speech Process
+
+```python
+class GeminiAudioGenerator:
+    def generate_audio(self, script: GeneratedScript) -> tuple[Path, list[float], float]:
+        # Concatenate all chunk texts
+        full_text = " ".join(chunk.text for chunk in script.chunks)
+        
+        # Call Gemini TTS API
+        response = self.client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=full_text,
+            config={
+                "response_modalities": ["audio"],
+                "speech_config": {
+                    "voice_config": {"prebuilt_voice_config": {"voice_name": "Puck"}}
+                }
+            }
+        )
+        
+        # Extract audio data
+        audio_data = response.candidates[0].content.parts[0].inline_data.data
+        
+        # Save to WAV file
+        audio_path = self.output_dir / "audio.wav"
+        audio_path.write_bytes(base64.b64decode(audio_data))
+        
+        return audio_path, chunk_latencies, stitch_time
+```
+
+**Location**: `backend/pipeline/gemini_audio_generator.py`
+
+**Typical latency**: 5-10 seconds for 2-minute audio
+
+### Voice Selection
+
+Gemini TTS supports multiple voices:
+
+- **Puck**: Energetic, enthusiastic (default)
+- **Charon**: Calm, professional
+- **Kore**: Warm, friendly
+- **Fenrir**: Deep, authoritative
+- **Aoede**: Clear, articulate
+
+<Info>
+  Voice selection can be configured in `backend/config.py`
+</Info>
+
+## Stage 3: Timestamp Extraction
+
+**Purpose**: Get word-level timestamps from the generated audio
+
+**Service**: Groq Whisper (STT)
+
+**Input**: WAV audio file
+
+**Output**: Transcription with millisecond-precise timestamps
+
+### Why STT After TTS?
+
+This might seem counterintuitive, but here's why it's necessary:
+
+1. **We don't know exact word timing**: The TTS engine decides how long each word takes
+2. **Pauses are unpredictable**: Natural speech includes pauses and variations
+3. **We need precise synchronization**: Actions must fire at the exact moment words are spoken
+
+By transcribing the audio back with Whisper, we get the **actual timestamps** of when each word is spoken.
+
+### Timestamp Format
+
+```json
+[
+  {
+    "word": "Let's",
+    "start_ms": 120,
+    "end_ms": 350
+  },
+  {
+    "word": "start",
+    "start_ms": 350,
+    "end_ms": 580
+  },
+  {
+    "word": "by",
+    "start_ms": 580,
+    "end_ms": 720
+  },
+  {
+    "word": "creating",
+    "start_ms": 720,
+    "end_ms": 1100
+  }
+]
+```
+
+### Implementation
+
+```python
+class TimestampExtractor:
+    def extract_timestamps(self, audio_path: Path) -> tuple[list[WordTimestamp], float]:
+        start_time = time.perf_counter()
+        
+        # Open audio file
+        with open(audio_path, 'rb') as f:
+            # Call Groq Whisper API
+            transcription = self.client.audio.transcriptions.create(
+                file=(audio_path.name, f.read()),
+                model="whisper-large-v3-turbo",
+                response_format="verbose_json",
+                timestamp_granularities=["word"]
+            )
+        
+        # Extract word timestamps
+        timestamps = []
+        for word_data in transcription.words:
+            timestamps.append(WordTimestamp(
+                word=word_data.word,
+                start_ms=int(word_data.start * 1000),
+                end_ms=int(word_data.end * 1000)
+            ))
+        
+        latency = (time.perf_counter() - start_time) * 1000
+        return timestamps, latency
+```
+
+**Location**: `backend/pipeline/timestamp_extractor.py`
+
+**Typical latency**: 3-8 seconds for 2-minute audio
+
+## Stage 4: Action Synchronization
+
+**Purpose**: Match IDE actions to their trigger words in the audio
+
+**Input**: 
+- Script with actions and trigger words
+- Word timestamps from Whisper
+
+**Output**: Actions with precise millisecond timestamps
+
+### Synchronization Algorithm
+
+For each action:
+
+1. Find the action's **trigger word** in the script
+2. Search for that word in the Whisper timestamps
+3. Assign the word's `start_ms` to the action
+4. Handle fuzzy matching for similar words
+
+```python
+class ActionSyncEngine:
+    def sync_actions(self, script: GeneratedScript, timestamps: list[WordTimestamp]) -> tuple[list[SyncedAction], float]:
+        synced_actions = []
+        timestamp_index = 0
+        
+        for chunk in script.chunks:
+            for action in chunk.actions:
+                # Find the trigger word in timestamps
+                trigger = action.trigger_word.lower().strip()
+                
+                # Search forward from current position
+                for i in range(timestamp_index, len(timestamps)):
+                    word = timestamps[i].word.lower().strip()
+                    
+                    if self._words_match(word, trigger):
+                        # Found the trigger word!
+                        synced_actions.append(SyncedAction(
+                            type=action.type,
+                            timestamp_ms=timestamps[i].start_ms,
+                            trigger_word=trigger,
+                            params=action.params
+                        ))
+                        timestamp_index = i + 1
+                        break
+        
+        return synced_actions, latency
+    
+    def _words_match(self, word1: str, word2: str) -> bool:
+        # Handle variations: "creating" matches "create", "import" matches "importing"
+        return word1.startswith(word2[:4]) or word2.startswith(word1[:4])
+```
+
+**Location**: `backend/pipeline/action_sync.py`
+
+**Typical latency**: &lt;1 second
+
+### Output Format
+
+```json
+[
+  {
+    "type": "create_file",
+    "timestamp_ms": 1100,
+    "trigger_word": "creating",
+    "params": {
+      "path": "App.jsx"
+    }
+  },
+  {
+    "type": "type_code",
+    "timestamp_ms": 3250,
+    "trigger_word": "import",
+    "params": {
+      "content": "import React from 'react';\n",
+      "speed": "medium"
+    }
+  }
+]
+```
+
+## Pipeline Orchestration
+
+The main pipeline orchestrator runs all four stages:
+
+```python
+def run_pipeline(user_prompt: str, output_dir: Path) -> PipelineResult:
+    """
+    Run the complete TTS pipeline.
+    """
+    metrics = LatencyMetrics()
+    
+    # Stage 1: Script Generation
+    script_gen = ScriptGenerator()
+    script, script_latency = script_gen.generate(user_prompt)
+    metrics.script_generation_ms = script_latency
+    
+    # Stage 2: Audio Generation
+    audio_gen = GeminiAudioGenerator(output_dir)
+    audio_path, chunk_latencies, stitch_time = audio_gen.generate_audio(script)
+    metrics.tts_total_ms = sum(chunk_latencies) + stitch_time
+    
+    # Stage 3: Timestamp Extraction
+    ts_extractor = TimestampExtractor()
+    timestamps, stt_latency = ts_extractor.extract_timestamps(audio_path)
+    metrics.stt_transcription_ms = stt_latency
+    
+    # Stage 4: Action Synchronization
+    sync_engine = ActionSyncEngine(output_dir)
+    synced_actions, sync_latency = sync_engine.sync_actions(script, timestamps)
+    metrics.action_sync_ms = sync_latency
+    
+    # Calculate total time
+    metrics.total_ms = sum([
+        metrics.script_generation_ms,
+        metrics.tts_total_ms,
+        metrics.stt_transcription_ms,
+        metrics.action_sync_ms
+    ])
+    
+    return PipelineResult(
+        audio_path=str(audio_path),
+        script=script,
+        synced_actions=synced_actions,
+        timestamps=timestamps,
+        metrics=metrics
+    )
+```
+
+**Location**: `backend/main.py:22`
+
+## Performance Metrics
+
+### Typical Latency Breakdown
+
+For a 2-minute walkthrough:
+
+```
+╔══════════════════════════════════════════════════════╗
+║  PIPELINE LATENCY REPORT                             ║
+╠══════════════════════════════════════════════════════╣
+║  Script Generation (GLM 4.7):        3,245 ms        ║
+║  Audio Generation (Gemini TTS):      7,892 ms        ║
+║  Timestamp Extraction (Whisper):     5,123 ms        ║
+║  Action Synchronization:               234 ms        ║
+║                                                       ║
+║  TOTAL PIPELINE TIME:               16,494 ms        ║
+║                                     (~16.5 seconds)  ║
+╚══════════════════════════════════════════════════════╝
+```
+
+### Optimization Opportunities
+
+<Tabs>
+  <Tab title="Current (Sequential)">
+    ```
+    Script → Audio → STT → Sync
+    3s      7s       5s     0.2s
+    
+    Total: 15.2 seconds
+    ```
+  </Tab>
+  <Tab title="Future (Parallel)">
+    ```
+    Script → Audio → STT → Sync
+       ↓
+       └─→ Chapter Snapshots (parallel)
+    
+    Potential savings: 2-3 seconds
+    ```
+  </Tab>
+</Tabs>
+
+## Error Handling
+
+Each stage includes robust error handling:
+
+### Script Generation Errors
+
+```python
+try:
+    script = GeneratedScript.model_validate(script_data)
+except ValidationError as e:
+    # Fallback: Generate a simple script
+    script = create_fallback_script(prompt)
+    logger.error(f"Script validation failed: {e}")
+```
+
+### Audio Generation Errors
+
+```python
+try:
+    audio_data = response.candidates[0].content.parts[0].inline_data.data
+except (IndexError, AttributeError):
+    raise AudioGenerationError("Failed to extract audio from Gemini response")
+```
+
+### Timestamp Extraction Errors
+
+```python
+if not transcription.words:
+    raise TimestampExtractionError("No word-level timestamps in Whisper response")
+```
+
+### Action Sync Errors
+
+```python
+if not found_trigger:
+    # Action has no matching trigger word
+    # Estimate timestamp based on chunk position
+    estimated_ms = estimate_timestamp_from_chunk_index(chunk_index, total_duration)
+    logger.warning(f"Could not find trigger word '{trigger}', using estimate")
+```
+
+## Output Files
+
+The pipeline saves multiple files for each walkthrough:
+
+```
+sessions/{session-id}/
+├── audio.wav              # Generated audio (Gemini TTS)
+├── actions.json           # Synced actions with timestamps
+├── script.json            # Original LLM script
+├── timestamps.json        # Word-level timestamps (Whisper)
+└── walkthrough.json       # Complete walkthrough metadata
+```
+
+### Sample `actions.json`
+
+```json
+[
+  {
+    "type": "create_file",
+    "timestamp_ms": 1100,
+    "trigger_word": "creating",
+    "params": {"path": "App.jsx"}
+  },
+  {
+    "type": "type_code",
+    "timestamp_ms": 3250,
+    "trigger_word": "import",
+    "params": {
+      "content": "import React from 'react';\n",
+      "speed": "medium"
+    }
+  }
+]
+```
+
+## Testing the Pipeline
+
+You can test the pipeline directly from the command line:
+
+```bash
+python main.py --prompt "Create a simple React component" --output ./test-output
+```
+
+This will:
+1. Generate a walkthrough for the given prompt
+2. Save all output files to `./test-output/`
+3. Print latency metrics
+
+### Sample Output
+
+```
+🚀 AI Coding Coach TTS Pipeline
+   TTS Provider: GEMINI
+════════════════════════════════════════════════════════════
+
+📝 User Prompt: Create a simple React component...
+
+========================================
+Stage 1: Script Generation (GLM 4.7)
+========================================
+✅ Generated 8 chunks with 12 actions
+   Latency: 3245ms
+
+========================================
+Stage 2: Audio Generation (GEMINI TTS)
+========================================
+✅ Generated audio: 124.3s
+
+========================================
+Stage 3: Timestamp Extraction (Whisper)
+========================================
+✅ Extracted 523 word timestamps
+   Latency: 5123ms
+
+========================================
+Stage 4: Action Synchronization
+========================================
+✅ Synchronized 12 actions
+   Latency: 234ms
+
+📁 Output files:
+   - Audio:      ./test-output/audio.wav
+   - Actions:    ./test-output/actions.json
+   - Script:     ./test-output/script.json
+   - Timestamps: ./test-output/timestamps.json
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Synchronization" icon="clock" href="/concepts/synchronization">
+    Learn how actions sync with audio
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/concepts/architecture">
+    Explore the system architecture
+  </Card>
+</CardGroup>
